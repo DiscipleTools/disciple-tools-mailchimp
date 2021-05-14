@@ -1,7 +1,7 @@
 <?php
 if ( !defined( 'ABSPATH' ) ) { exit; } // Exit if accessed directly.
 
-class Disciple_Tools_Plugin_Starter_Template_Tile
+class Disciple_Tools_Mailchimp_Tile
 {
     private static $_instance = null;
     public static function instance(){
@@ -14,7 +14,7 @@ class Disciple_Tools_Plugin_Starter_Template_Tile
     public function __construct(){
         add_filter( 'dt_details_additional_tiles', [ $this, "dt_details_additional_tiles" ], 10, 2 );
         add_filter( "dt_custom_fields_settings", [ $this, "dt_custom_fields" ], 1, 2 );
-        add_action( "dt_details_additional_section", [ $this, "dt_add_section" ], 30, 2 );
+        // add_action( "dt_details_additional_section", [ $this, "dt_add_section" ], 30, 2 );
     }
 
     /**
@@ -29,7 +29,7 @@ class Disciple_Tools_Plugin_Starter_Template_Tile
      */
     public function dt_details_additional_tiles( $tiles, $post_type = "" ) {
         if ( $post_type === "contacts" ){
-            $tiles["disciple_tools_plugin_starter_template"] = [ "label" => __( "Plugin Starter Template", 'disciple_tools' ) ];
+            $tiles["disciple_tools_mailchimp"] = [ "label" => __( "Mailchimp", 'disciple_tools' ) ];
         }
         return $tiles;
     }
@@ -57,38 +57,43 @@ class Disciple_Tools_Plugin_Starter_Template_Tile
 
             /**
              * This is an example of a text field
-             */
-            $fields['disciple_tools_plugin_starter_template_text'] = [
+             *
+            $fields['disciple_tools_mailchimp_text'] = [
                 'name'        => __( 'Text', 'disciple_tools' ),
                 'description' => _x( 'Text', 'Optional Documentation', 'disciple_tools' ),
                 'type'        => 'text',
                 'default'     => '',
-                'tile' => 'disciple_tools_plugin_starter_template',
+                'tile' => 'disciple_tools_mailchimp',
                 'icon' => get_template_directory_uri() . '/dt-assets/images/edit.svg',
             ];
             /**
-             * This is an example of a multiselect field
+             * Mailchimp supported lists multiselect field
              */
-            $fields["disciple_tools_plugin_starter_template_multiselect"] = [
-                "name" => __( 'Multiselect', 'disciple_tools' ),
-                "default" => [
-                    "one" => [ "label" => __( "One", 'disciple_tools' ) ],
-                    "two" => [ "label" => __( "Two", 'disciple_tools' ) ],
-                    "three" => [ "label" => __( "Three", 'disciple_tools' ) ],
-                    "four" => [ "label" => __( "Four", 'disciple_tools' ) ],
-                ],
-                "tile" => "disciple_tools_plugin_starter_template",
-                "type" => "multi_select",
+            $fields["disciple_tools_mailchimp_supported_lists_multiselect"]            = [
+                "name"   => __( 'Audiences Lists', 'disciple_tools' ),
+                "tile"   => "disciple_tools_mailchimp",
+                "type"   => "multi_select",
                 "hidden" => false,
-                'icon' => get_template_directory_uri() . '/dt-assets/images/edit.svg',
+                'icon'   => get_template_directory_uri() . '/dt-assets/images/list.svg',
             ];
+            $fields["disciple_tools_mailchimp_supported_lists_multiselect"]["default"] = [];
+
+            $supported_mc_lists = get_option( 'dt_mailchimp_mc_supported_lists' );
+            if ( ! empty( $supported_mc_lists ) ) {
+                foreach ( json_decode( $supported_mc_lists ) as $list ) {
+                    $fields["disciple_tools_mailchimp_supported_lists_multiselect"]["default"][ $list->id ] = [
+                        "label" => $list->name
+                    ];
+                }
+            }
+
             /**
              * This is an example of a key select field
-             */
-            $fields["disciple_tools_plugin_starter_template_keyselect"] = [
+             *
+            $fields["disciple_tools_mailchimp_keyselect"] = [
                 'name' => "Key Select",
                 'type' => 'key_select',
-                "tile" => "disciple_tools_plugin_starter_template",
+                "tile" => "disciple_tools_mailchimp",
                 'default' => [
                     'new'   => [
                         "label" => _x( 'New', 'Training Status label', 'disciple_tools' ),
@@ -129,6 +134,7 @@ class Disciple_Tools_Plugin_Starter_Template_Tile
                 'icon' => get_template_directory_uri() . '/dt-assets/images/edit.svg',
                 "default_color" => "#366184",
             ];
+             */
         }
         return $fields;
     }
@@ -137,7 +143,7 @@ class Disciple_Tools_Plugin_Starter_Template_Tile
         /**
          * @todo set the post type and the section key that you created in the dt_details_additional_tiles() function
          */
-        if ( $post_type === "contacts" && $section === "disciple_tools_plugin_starter_template" ){
+        if ( $post_type === "contacts" && $section === "disciple_tools_mailchimp" ){
             /**
              * These are two sets of key data:
              * $this_post is the details for this specific post
@@ -163,4 +169,4 @@ class Disciple_Tools_Plugin_Starter_Template_Tile
         <?php }
     }
 }
-Disciple_Tools_Plugin_Starter_Template_Tile::instance();
+Disciple_Tools_Mailchimp_Tile::instance();
