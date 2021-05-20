@@ -153,6 +153,7 @@ class Disciple_Tools_Mailchimp {
         require_once( 'vendor/autoload.php' );
         require_once( 'mailchimp-api/mailchimp-api.php' );
         require_once( 'mailchimp-api/mailchimp-sync.php' );
+        require_once( 'mailchimp-api/mailchimp-auto-subscribe.php' );
     }
 
     /**

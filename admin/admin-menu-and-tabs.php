@@ -993,6 +993,28 @@ class Disciple_Tools_Mailchimp_Tab_Mappings {
 
     private function main_column_display_selected_list_field_mappings( $mc_list_id ) {
         ?>
+        <select style="min-width: 100%;" id="mc_mappings_main_col_selected_mc_list_assigned_post_type">
+            <option disabled selected value>-- select assigned post type --</option>
+            <?php
+            // First, determine if there is already an assigned post type
+            $assigned_post_type = '';
+            $existing_mappings  = ! empty( get_option( 'dt_mailchimp_mappings' ) ) ? json_decode( get_option( 'dt_mailchimp_mappings' ) ) : json_decode( '{}' );
+            if ( isset( $existing_mappings->{$mc_list_id} ) ) {
+                $assigned_post_type = $existing_mappings->{$mc_list_id}->dt_post_type ?? '';
+            }
+
+            // List available post types, ensuring to pre-select an already assigned type
+            $supported_post_types = ! empty( get_option( 'dt_mailchimp_dt_supported_post_types' ) ) ? json_decode( get_option( 'dt_mailchimp_dt_supported_post_types' ) ) : json_decode( '[]' );
+            if ( ! empty( $supported_post_types ) ) {
+                foreach ( $supported_post_types as $post_type ) {
+                    $selected = ( $assigned_post_type === $post_type->id ) ? 'selected' : '';
+                    echo '<option ' . esc_attr( $selected ) . ' value="' . esc_attr( $post_type->id ) . '">' . esc_attr( $post_type->name ) . '</option>';
+                }
+            }
+            ?>
+        </select>
+        <br><br>
+
         <span style="float:right;">
             <a id="mc_mappings_main_col_selected_mc_list_add_mapping_but"
                class="button float-right"><?php esc_html_e( "Add Mapping", 'disciple_tools' ) ?></a>
@@ -1073,9 +1095,10 @@ class Disciple_Tools_Mailchimp_Tab_Mappings {
                     $post_type        = DT_Posts::get_post_settings( $type );
                     $post_type_fields = [];
                     if ( ! empty( $post_type['fields'] ) ) {
-                        foreach ( $post_type['fields'] as $field ) {
+                        foreach ( $post_type['fields'] as $key => $field ) {
                             if ( in_array( $field['type'], $supported_field_types ) ) {
                                 $post_type_fields[] = (object) [
+                                    "id" => $key,
                                     "type" => $field['type'],
                                     "name" => $field['name']
                                 ];
@@ -1125,7 +1148,7 @@ class Disciple_Tools_Mailchimp_Tab_Mappings {
                             <?php
                             $mc_fields = $this->main_column_display_selected_list_field_mappings_parsed_mc_fields( $mc_list_id );
                             foreach ( $mc_fields as $mc_field ) {
-                                $selected = ( ( $mapping->mc_field_id ) === ( $mc_field->merge_id ) ) ? 'selected' : '';
+                                $selected = ( $mapping->mc_field_id === $mc_field->merge_id ) ? 'selected' : '';
                                 echo '<option ' . esc_attr( $selected ) . ' value="' . esc_attr( $mc_field->merge_id ) . '">' . esc_attr( $mc_field->name ) . '</option>';
                             }
                             ?>
@@ -1141,8 +1164,8 @@ class Disciple_Tools_Mailchimp_Tab_Mappings {
                             foreach ( $dt_fields as $dt_field ) {
                                 echo '<option disabled value>-- ' . esc_attr( $dt_field->post_type_label ) . ' --</option>';
                                 foreach ( $dt_field->post_type_fields as $field ) {
-                                    $selected = ( $mapping->dt_field_id === ( $dt_field->post_type_id . '_' . $field->name ) ) ? 'selected' : '';
-                                    echo '<option ' . esc_attr( $selected ) . ' value="' . esc_attr( $dt_field->post_type_id . '_' . $field->name ) . '">' . esc_attr( $field->name ) . '</option>';
+                                    $selected = ( $mapping->dt_field_id === $field->id ) ? 'selected' : '';
+                                    echo '<option ' . esc_attr( $selected ) . ' value="' . esc_attr( $field->id ) . '">' . esc_attr( $field->name ) . '</option>';
                                 }
                             }
                             ?>
@@ -1157,6 +1180,9 @@ class Disciple_Tools_Mailchimp_Tab_Mappings {
                             <option selected value="">-- select option --</option>
                             <option value="field-sync-direction">Field Sync Directions</option>
                         </select>
+                        <input id="mc_mappings_main_col_selected_mc_list_mappings_table_col_options_hidden"
+                               type="hidden"
+                               value="<?php echo esc_attr( json_encode( $mapping->options ) ) ?>"/>
                     </td>
 
                     <!-- Mapping Removal Button -->
@@ -1187,6 +1213,14 @@ class Disciple_Tools_Mailchimp_Tab_Mappings {
 
                 $(document).on('change', '.mc-mappings-main-col-selected-mc-list-mappings-table-col-options-select-ele', function (e) {
                     mapping_option_display_selected(e.currentTarget);
+                });
+
+                $(document).on('click', '#mappings_option_field_sync_direction_remove_but', function () {
+                    mapping_option_field_sync_direction_remove();
+                });
+
+                $(document).on('click', '#mappings_option_field_sync_direction_commit_but', function () {
+                    mapping_option_field_sync_direction_commit();
                 });
 
                 function mc_list_mapping_add() {
@@ -1232,7 +1266,7 @@ class Disciple_Tools_Mailchimp_Tab_Mappings {
 
                         // Post type fields
                         post_type.post_type_fields.forEach(field => {
-                            html += '<option value="' + window.lodash.escape(post_type.post_type_id + '_' + field.name) + '">' + window.lodash.escape(field.name) + '</option>';
+                            html += '<option value="' + window.lodash.escape(field.id) + '">' + window.lodash.escape(field.name) + '</option>';
                         });
                     });
                     html += '</select>';
@@ -1245,6 +1279,7 @@ class Disciple_Tools_Mailchimp_Tab_Mappings {
                     html += '<option selected value="">-- select option --</option>';
                     html += '<option value="field-sync-direction">Field Sync Directions</option>';
                     html += '</select>';
+                    html += '<input id="mc_mappings_main_col_selected_mc_list_mappings_table_col_options_hidden" type="hidden" value="[]" />'
 
                     return html;
                 }
@@ -1263,7 +1298,7 @@ class Disciple_Tools_Mailchimp_Tab_Mappings {
                         let mapping_id = $(tr).find('#mc_mappings_main_col_selected_mc_list_mappings_table_row_mapping_id_hidden').val();
                         let mc_field_id = $(tr).find('#mc_mappings_main_col_selected_mc_list_mappings_table_col_mc_fields_select_ele').val();
                         let dt_field_id = $(tr).find('#mc_mappings_main_col_selected_mc_list_mappings_table_col_dt_fields_select_ele').val();
-                        let options = [];
+                        let options = JSON.parse($(tr).find('#mc_mappings_main_col_selected_mc_list_mappings_table_col_options_hidden').val());
 
                         // Ensure key values present needed to form mapping
                         if (mc_list_update_validate_values(mapping_id, mc_field_id, dt_field_id, options)) {
@@ -1285,6 +1320,7 @@ class Disciple_Tools_Mailchimp_Tab_Mappings {
                     let mappings_obj = {
                         "mc_list_id": $('#mc_mappings_main_col_selected_mc_list_id_hidden').val(),
                         "mc_list_name": $('#mc_mappings_main_col_selected_mc_list_name_hidden').val(),
+                        "dt_post_type": $('#mc_mappings_main_col_selected_mc_list_assigned_post_type').val(),
                         "mappings": mappings
                     }
 
@@ -1302,13 +1338,50 @@ class Disciple_Tools_Mailchimp_Tab_Mappings {
                         (dt_field_id && dt_field_id !== ""));
                 }
 
+                function mapping_option_load_option(selected, option_id) {
+                    let option_found = null;
+                    let options = JSON.parse(selected.parentNode.querySelector('#mc_mappings_main_col_selected_mc_list_mappings_table_col_options_hidden').value);
+
+                    // Loop over options in search of specific option
+                    options.forEach(option => {
+                        if ((option) && (option.id === option_id)) {
+                            option_found = option;
+                        }
+                    });
+
+                    return option_found;
+                }
+
+                function mapping_option_update_option(mapping_id, option_id, option, remove_only, callback) {
+                    $('#mc_mappings_main_col_selected_mc_list_mappings_table > tbody > tr').each(function (idx, tr) {
+                        if ($(tr).find('#mc_mappings_main_col_selected_mc_list_mappings_table_row_mapping_id_hidden').val() === mapping_id) {
+                            let options = JSON.parse($(tr).find('#mc_mappings_main_col_selected_mc_list_mappings_table_col_options_hidden').val());
+
+                            // Loop over options in search of previous option settings, to be removed
+                            options.forEach((option, opt_idx) => {
+                                if ((option) && (option.id === option_id)) {
+                                    options.splice(opt_idx, 1);
+                                }
+                            });
+
+                            // Add/Commit latest option settings and save back to hidden field, assuming it's a full update request
+                            if (!remove_only) {
+                                options.push(option);
+                            }
+                            $(tr).find('#mc_mappings_main_col_selected_mc_list_mappings_table_col_options_hidden').val(JSON.stringify(options));
+                        }
+                    });
+
+                    callback();
+                }
+
                 function mapping_option_display_selected(selected) {
                     // Hide whatever is currently displayed, prior to showing recently selected
                     $('#mappings_option_div').fadeOut('slow', function () {
                         if (selected.value) {
                             switch (selected.value) {
                                 case 'field-sync-direction':
-                                    mapping_option_field_sync_direction(selected, '#mappings_option_div');
+                                    mapping_option_field_sync_direction(selected);
                                     break;
                                 default:
                                     break;
@@ -1317,10 +1390,10 @@ class Disciple_Tools_Mailchimp_Tab_Mappings {
                     });
                 }
 
-                function mapping_option_field_sync_direction(selected, mappings_option_div_id) {
+                function mapping_option_field_sync_direction(selected) {
 
                     // Fetch values
-                    let mappings_option_div = $(mappings_option_div_id);
+                    let mappings_option_div = $('#mappings_option_div');
                     let option_value = selected.value;
                     let option_text = selected.options[selected.selectedIndex].text;
                     let mapping_id = selected.parentNode.parentNode.querySelector('#mc_mappings_main_col_selected_mc_list_mappings_table_row_mapping_id_hidden').value;
@@ -1328,12 +1401,63 @@ class Disciple_Tools_Mailchimp_Tab_Mappings {
                     // Update main mapping options area with selected view display shape
                     mappings_option_div.html($('#mappings_option_field_sync_direction').html());
 
-                    // Set key fields
+                    // Set key header fields
                     $('#mappings_option_field_sync_direction_title').html(option_text);
                     $('#mappings_option_field_sync_direction_mapping_id').html(mapping_id);
+                    $('#mappings_option_field_sync_direction_option_id_hidden').val(option_value);
+
+                    // Attempt to Load any saved options or revert to defaults
+                    let option = mapping_option_load_option(selected, option_value);
+
+                    let enabled = (option) ? option.enabled : true;
+                    let priority = (option) ? option.priority : 1;
+                    let mc_sync_feeds = (option) ? option.mc_sync_feeds : true;
+                    let dt_sync_feeds = (option) ? option.dt_sync_feeds : true;
+
+                    // Set visuals accordingly
+                    $('#mappings_option_field_sync_direction_enabled').prop('checked', enabled);
+                    $('#mappings_option_field_sync_direction_exec_priority').val(priority);
+                    $('#mappings_option_field_sync_direction_pull_mc').prop('checked', mc_sync_feeds);
+                    $('#mappings_option_field_sync_direction_push_dt').prop('checked', dt_sync_feeds);
 
                     // Display selected mapping options view
                     mappings_option_div.fadeIn('fast');
+                }
+
+                function mapping_option_field_sync_direction_commit() {
+
+                    // Capture current values
+                    let option_id = $('#mappings_option_field_sync_direction_option_id_hidden').val();
+                    let mapping_id = $('#mappings_option_field_sync_direction_mapping_id').html();
+                    let enabled = $('#mappings_option_field_sync_direction_enabled').prop('checked');
+                    let priority = $('#mappings_option_field_sync_direction_exec_priority').val();
+                    let mc_sync_feeds = $('#mappings_option_field_sync_direction_pull_mc').prop('checked');
+                    let dt_sync_feeds = $('#mappings_option_field_sync_direction_push_dt').prop('checked');
+
+                    mapping_option_update_option(mapping_id, option_id, {
+                        'id': option_id,
+                        'mapping_id': mapping_id,
+                        'enabled': enabled,
+                        'priority': priority,
+                        'mc_sync_feeds': mc_sync_feeds,
+                        'dt_sync_feeds': dt_sync_feeds
+
+                    }, false, function () {
+                        $('#mappings_option_div').fadeOut('fast', function () {
+                            $('#mappings_option_div').fadeIn('fast');
+                        });
+                    })
+                }
+
+                function mapping_option_field_sync_direction_remove() {
+
+                    // Capture current values
+                    let option_id = $('#mappings_option_field_sync_direction_option_id_hidden').val();
+                    let mapping_id = $('#mappings_option_field_sync_direction_mapping_id').html();
+
+                    mapping_option_update_option(mapping_id, option_id, null, true, function () {
+                        $('#mappings_option_div').fadeOut('slow');
+                    });
                 }
             });
         </script>

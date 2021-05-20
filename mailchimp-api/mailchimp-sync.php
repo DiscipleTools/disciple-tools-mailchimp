@@ -81,16 +81,16 @@ function sync_dt_to_mc() {
                 if ( is_dt_record_sync_enabled( $dt_post_record ) ) {
 
                     // Iterate over subscribed mc lists and find associated mapping; assuming list is available and supported
-                    foreach ( $dt_post_record['disciple_tools_mailchimp_supported_lists_multiselect'] as $subscribed_mc_list_id ) {
+                    foreach ( $dt_post_record['dt_mailchimp_subscribed_mc_lists'] as $subscribed_mc_list_id ) {
 
                         // Ensure mc list is supported and has mapping
                         if ( in_array( $subscribed_mc_list_id, $supported_mc_lists ) && isset( $supported_mappings->$subscribed_mc_list_id ) ) {
 
-                            // Ensure field mappings correspond with current post type id; so as to avoid cross post type syncs
-                            if ( has_matching_post_type_field_mappings( $dt_post_type_id, $supported_mappings->$subscribed_mc_list_id->mappings ) ) {
+                            // Ensure mappings post type corresponds with current post type id; so as to avoid cross post type syncs
+                            if ( $dt_post_type_id === $supported_mappings->$subscribed_mc_list_id->dt_post_type ) {
 
                                 // Extract array of mapped fields; which are to be kept in sync
-                                $field_mappings = extract_field_mappings( $dt_post_type_id, $supported_mappings->$subscribed_mc_list_id->mappings );
+                                $field_mappings = $supported_mappings->$subscribed_mc_list_id->mappings;
 
                                 // First, attempt to fetch corresponding mc record, using the info to hand!
                                 $mc_record = fetch_mc_record( $dt_post_record, $subscribed_mc_list_id );
@@ -111,7 +111,6 @@ function sync_dt_to_mc() {
 
                                         $updated = update_mc_record( $subscribed_mc_list_id, $dt_post_record, $mc_record, $field_mappings );
                                         sync_debug( 'dt_mailchimp_dt_debug', $updated );
-
                                     }
                                 }
                             }
@@ -155,31 +154,37 @@ function sync_mc_to_dt() {
                 // Ensure record's assigned mc list is supported and has mapping
                 if ( in_array( $mc_record->list_id, $supported_mc_lists ) && isset( $supported_mappings->{$mc_record->list_id} ) ) {
 
-                    // Identify mappings post types - There should only be a single hit, so as to avoid cross post type mapping updates!
-                    $mapping_post_types = identify_mapping_post_types( $supported_mappings->{$mc_record->list_id}->mappings );
-                    if ( count( $mapping_post_types ) === 1 ) {
+                    $hidden_id_field_tag = Disciple_Tools_Mailchimp_API::get_default_list_hidden_id_field();
+                    $dt_post_type_id     = $supported_mappings->{$mc_record->list_id}->dt_post_type;
 
-                        // Ensure mc record has hidden field containing dt post id
-                        if ( isset( $mc_record->merge_fields->{Disciple_Tools_Mailchimp_API::get_default_list_hidden_id_field()} ) ) {
+                    // If mc record does not have a hidden post id ref, then create a new corresponding dt record to twin with
+                    $dt_record        = null;
+                    $is_new_dt_record = false;
+                    if ( ! isset( $mc_record->merge_fields->{$hidden_id_field_tag} ) || empty( $mc_record->merge_fields->{$hidden_id_field_tag} ) ) {
+                        $dt_record        = create_dt_record( $mc_record, $dt_post_type_id );
+                        $is_new_dt_record = true;
 
-                            $dt_post_type_id = $mapping_post_types[0];
-                            $dt_post_id      = $mc_record->merge_fields->{Disciple_Tools_Mailchimp_API::get_default_list_hidden_id_field()};
+                    } else {
+                        // Fetch corresponding dt post record and ensure it is to be kept in sync and it's subscribed
+                        $dt_post_id = $mc_record->merge_fields->{$hidden_id_field_tag};
+                        $dt_record  = DT_Posts::get_post( $dt_post_type_id, $dt_post_id, false, false );
+                    }
 
-                            // Fetch corresponding dt post record and ensure it is to be kept in sync and it's subscribed
-                            $dt_record = DT_Posts::get_post( $dt_post_type_id, $dt_post_id, false, false );
-                            if ( ! empty( $dt_record ) && is_dt_record_sync_enabled( $dt_record ) && in_array( $mc_record->list_id, $dt_record['disciple_tools_mailchimp_supported_lists_multiselect'] ) ) {
+                    // Handle dt record subscription status - Ensure it remains in sync with mc record
+                    $dt_record = handle_dt_record_subscription( $dt_record, $mc_record );
 
-                                // Ensure mc record has latest changes, in order to update dt
-                                if ( ! dt_record_has_latest_changes( $dt_record, $mc_record ) ) {
+                    // Only proceed if we have a handle on corresponding dt record
+                    if ( ! empty( $dt_record ) && is_dt_record_sync_enabled( $dt_record ) && in_array( $mc_record->list_id, $dt_record['dt_mailchimp_subscribed_mc_lists'] ) ) {
 
-                                    // Extract array of mapped fields; which are to be kept in sync
-                                    $field_mappings = extract_field_mappings( $dt_post_type_id, $supported_mappings->{$mc_record->list_id}->mappings );
+                        // Ensure mc record has latest changes, in order to update dt
+                        if ( $is_new_dt_record || ! dt_record_has_latest_changes( $dt_record, $mc_record ) ) {
 
-                                    // Update dt record
-                                    $updated = update_dt_record( $dt_record, $mc_record, $field_mappings );
-                                    sync_debug( 'dt_mailchimp_mc_debug', $updated );
-                                }
-                            }
+                            // Extract array of mapped fields; which are to be kept in sync
+                            $field_mappings = $supported_mappings->{$mc_record->list_id}->mappings;
+
+                            // Update dt record
+                            $updated = update_dt_record( $dt_record, $mc_record, $field_mappings );
+                            sync_debug( 'dt_mailchimp_mc_debug', $updated );
                         }
                     }
                 }
@@ -252,40 +257,7 @@ function fetch_latest_mc_records( $list, $timestamp ): array {
 }
 
 function is_dt_record_sync_enabled( $dt_post ): bool {
-    return ( isset( $dt_post['disciple_tools_mailchimp_supported_lists_multiselect'] ) && ( count( $dt_post['disciple_tools_mailchimp_supported_lists_multiselect'] ) > 0 ) );
-}
-
-function has_matching_post_type_field_mappings( $post_type_id, $mappings ): bool {
-    $all_match = true;
-    foreach ( $mappings as $mapping ) {
-        if ( substr( $mapping->dt_field_id, 0, strlen( $post_type_id . '_' ) ) !== $post_type_id . '_' ) {
-            $all_match = false;
-        }
-    }
-
-    return $all_match;
-}
-
-function identify_mapping_post_types( $mappings ): array {
-    $post_types = [];
-    foreach ( $mappings as $mapping ) {
-        $post_types[] = explode( '_', $mapping->dt_field_id, 2 )[0];
-    }
-
-    return array_unique( $post_types );
-}
-
-function extract_field_mappings( $post_type_id, $mappings ): array {
-    $field_mappings = array();
-    foreach ( $mappings as $mapping ) {
-        $field_mappings[] = (object) [
-            'mc_field_id' => $mapping->mc_field_id,
-            'dt_field_id' => substr( $mapping->dt_field_id, strlen( $post_type_id . '_' ) ),
-            'options'     => $mapping->options
-        ];
-    }
-
-    return $field_mappings;
+    return ( isset( $dt_post['dt_mailchimp_subscribed_mc_lists'] ) && ( count( $dt_post['dt_mailchimp_subscribed_mc_lists'] ) > 0 ) );
 }
 
 function fetch_mc_record( $dt_post_record, $mc_list_id ) {
@@ -337,7 +309,53 @@ function create_mc_record( $dt_post_record, $mc_list_id ) {
     return null;
 }
 
+function create_dt_record( $mc_record, $dt_post_type ) {
+    // At the very least, both mc record's full name and list id will be needed in order to setup new dt record
+    $mc_record_full_name = $mc_record->full_name;
+    $mc_record_list_id   = $mc_record->list_id;
+
+    if ( ! empty( $mc_record_full_name ) && ! empty( $mc_record_list_id ) ) {
+
+        // Prepare initial dt fields
+        $dt_fields = [];
+
+        $dt_fields['type']                 = 'access';
+        $dt_fields['sources']['values'][0] = [
+            'value' => 'mailchimp'
+        ];
+
+        $dt_fields['name']                                          = $mc_record_full_name;
+        $dt_fields['dt_mailchimp_subscribed_mc_lists']['values'][0] = [
+            'value' => $mc_record_list_id
+        ];
+
+        // Create new dt post
+        $dt_record = DT_Posts::create_post( $dt_post_type, $dt_fields, false, false );
+        sync_debug( 'dt_mailchimp_mc_debug', $dt_record );
+        if ( ! empty( $dt_record ) && isset( $dt_record['ID'] ) ) {
+
+            // Update parent mc record's hidden post id field
+            $mc_fields = [];
+            if ( Disciple_Tools_Mailchimp_API::has_list_got_hidden_id_fields( $mc_record_list_id ) ) {
+                $mc_fields['merge_fields'] = [
+                    Disciple_Tools_Mailchimp_API::get_default_list_hidden_id_field() => $dt_record['ID']
+                ];
+
+                // Return dt record state accordingly
+                $updated_mc_record = Disciple_Tools_Mailchimp_API::update_list_member( $mc_record_list_id, $mc_record->id, $mc_fields );
+
+                return ! empty( $updated_mc_record ) ? $dt_record : null;
+            }
+        }
+    }
+
+    return null;
+}
+
 function extract_dt_record_email( $dt_post_record ) {
+
+    // todo: logic might need a re-think; lets see how it holds up!
+
     // First, determine dt record's post type settings
     $post_type_settings = DT_Posts::get_post_settings( $dt_post_record['post_type'] );
 
@@ -355,60 +373,112 @@ function dt_record_has_latest_changes( $dt_record, $mc_record ): bool {
     return intval( $dt_record['last_modified']['timestamp'] ) > strtotime( $mc_record->last_changed );
 }
 
-function update_mc_record( $mc_list_id, $dt_record, $mc_record, $mappings ) {
-    // First, determine dt record's post type settings
-    $post_type_settings = DT_Posts::get_post_settings( $dt_record['post_type'] );
+function apply_mapping_options( $dt_record, $mc_record, $value, $is_dt_to_mc_sync, $options ) {
 
-    // Next, loop over all mapped fields; updating accordingly based on specified options
+    // Package value into an applied option value object; which can accommodate additional metadata
+    $applied_option_value = (object) [
+        'continue' => true,
+        'value'    => $value
+    ];
+
+    // Just return and continue if no options are detected
+    if ( ! ( count( $options ) > 0 ) ) {
+        return $applied_option_value;
+    }
+
+    // Assuming options have been specified, only work with enabled options
+    $enabled_options = array_filter( $options, function ( $option ) {
+        return boolval( $option->enabled );
+    } );
+
+    // Now, sort by option priority; which will also double up as order of mapping option filter execution
+    usort( $enabled_options, function ( $a, $b ) {
+        return intval( $a->priority ) - intval( $b->priority );
+    } );
+
+    // Loop over sorted options, filtering accordingly
+    foreach ( $enabled_options as $option ) {
+        $applied_option_value = apply_filters( $option->id, $dt_record, $mc_record, $applied_option_value, $is_dt_to_mc_sync, $option );
+    }
+
+    // Return value following application of mapping option filters
+    return $applied_option_value;
+}
+
+add_filter( 'field-sync-direction', 'mapping_option_field_sync_direction_callback', 10, 5 );
+function mapping_option_field_sync_direction_callback( $dt_record, $mc_record, $value, $is_dt_to_mc_sync, $option ) {
+
+    // If disabled or no longer allowed to continue, just echo value back...
+    if ( ( ! boolval( $option->enabled ) ) || ( ! $value->continue ) ) {
+        return $value;
+    }
+
+    // Proceed with evaluation...
+    if ( $is_dt_to_mc_sync && boolval( $option->dt_sync_feeds ) ) {
+        $value->continue = true;
+
+    } elseif ( ! $is_dt_to_mc_sync && boolval( $option->mc_sync_feeds ) ) {
+        $value->continue = true;
+
+    } else {
+        $value->continue = false;
+    }
+
+    return $value;
+}
+
+function update_mc_record( $mc_list_id, $dt_record, $mc_record, $mappings ) {
+
+    // Loop over all mapped fields; updating accordingly based on specified options
     $updated_fields = [];
     foreach ( $mappings as $mapping ) {
-
-        // Determine dt field name - Ensure post type prefix is assigned accordingly
-        $dt_field_name_no_prefix   = strtolower( $mapping->dt_field_id );
-        $dt_field_name_with_prefix = strtolower( $post_type_settings['label_singular'] . '_' . $mapping->dt_field_id );
-        $dt_field                  = $dt_record[ $dt_field_name_no_prefix ] ?? $dt_record[ $dt_field_name_with_prefix ];
 
         // Distinguish between different field shapes; e.g. arrays, strings...
         // If array, default value will be taken from the first element
+        $dt_field = $dt_record[ $mapping->dt_field_id ];
         if ( ! empty( $dt_field ) ) {
             $dt_field_value = is_array( $dt_field ) ? $dt_field[0]['value'] : $dt_field;
 
-            // todo: apply mapping transformation options prior to setting updated dt value
+            // Apply mapping transformation options prior to setting updated dt value
+            $applied_mapping_options = apply_mapping_options( $dt_record, $mc_record, $dt_field_value, true, $mapping->options );
 
-            // Add updated value
-            $updated_fields[ $mapping->mc_field_id ] = $dt_field_value;
+            // Add updated value, assuming we have the green light to do so, following filtering of mapping options
+            if ( $applied_mapping_options->continue ) {
+
+                // Safeguard against potential infinite update loops
+                if ( ! matching_mc_field_value( $mc_record, $mapping->mc_field_id, $applied_mapping_options->value ) ) {
+                    $updated_fields[ $mapping->mc_field_id ] = $applied_mapping_options->value;
+                }
+            }
         }
     }
 
-    // Package updated values, ahead of final push
-    $updated_mc_record                 = [];
-    $updated_mc_record['merge_fields'] = $updated_fields;
+    // Only proceed if we have something to say! ;)
+    if ( count( $updated_fields ) > 0 ) {
 
-    // Finally, post update request
-    return Disciple_Tools_Mailchimp_API::update_list_member( $mc_list_id, $mc_record->id, $updated_mc_record );
+        // Package updated values, ahead of final push
+        $updated_mc_record                 = [];
+        $updated_mc_record['merge_fields'] = $updated_fields;
+
+        // Finally, post update request
+        return Disciple_Tools_Mailchimp_API::update_list_member( $mc_list_id, $mc_record->id, $updated_mc_record );
+
+    } else {
+        return null;
+    }
 }
 
 function update_dt_record( $dt_record, $mc_record, $mappings ) {
-    // First, determine dt record's post type settings
-    $post_type_settings = DT_Posts::get_post_settings( $dt_record['post_type'] );
 
-    // Next, iterate over mapped fields
+    // First, fetch dt post type field settings; which will be used further down stream
+    $dt_fields = DT_Posts::get_post_settings( $dt_record['post_type'] )['fields'];
+
+    // Iterate over mapped fields
     $updated_fields = [];
     foreach ( $mappings as $mapping ) {
 
-        // Now ensure dt record also contains corresponding mapped field
-        $dt_field_name_no_prefix   = strtolower( $mapping->dt_field_id );
-        $dt_field_name_with_prefix = strtolower( $post_type_settings['label_singular'] . '_' . $mapping->dt_field_id );
-        $dt_field_name             = '';
-
         // Determine actual field name
-        if ( isset( $dt_record[ $dt_field_name_no_prefix ] ) ) {
-            $dt_field_name = $dt_field_name_no_prefix;
-        } elseif ( isset( $dt_record[ $dt_field_name_with_prefix ] ) ) {
-            $dt_field_name = $dt_field_name_with_prefix;
-        }
-
-        // todo: handle cases when field is yet to be created within dt record - need to determine when prefix should be added - question for @corsac
+        $dt_field_name = $mapping->dt_field_id;
 
         // Only proceed if a valid dt field name has been identified
         if ( ! empty( $dt_field_name ) ) {
@@ -419,17 +489,33 @@ function update_dt_record( $dt_record, $mc_record, $mappings ) {
 
             if ( ! empty( $mc_field_value ) ) {
 
-                // todo: apply mapping transformation options prior to setting updated mc value
+                // Apply mapping transformation options prior to setting updated mc value
+                $applied_mapping_options = apply_mapping_options( $dt_record, $mc_record, $mc_field_value, false, $mapping->options );
 
-                // Add updated value
-                if ( is_array( $dt_record[ $dt_field_name ] ) ) {
-                    $updated_fields[ $dt_field_name ][0] = [
-                        'value' => $mc_field_value,
-                        'key'   => $dt_record[ $dt_field_name ][0]['key']
-                    ];
+                // Add updated value, assuming we have the green light to do so, following filtering of mapping options
+                if ( $applied_mapping_options->continue ) {
 
-                } else {
-                    $updated_fields[ $dt_field_name ] = $mc_field_value;
+                    // Safeguard against potential infinite update loops
+                    if ( ! matching_dt_field_value( $dt_record, $dt_field_name, $applied_mapping_options->value ) ) {
+
+                        // Update accordingly based on field type and it's presence!
+                        $is_text_field = isset( $dt_fields[ $dt_field_name ] ) && strtolower( $dt_fields[ $dt_field_name ]['type'] ) === 'text';
+
+                        if ( $is_text_field ) {
+                            $updated_fields[ $dt_field_name ] = $applied_mapping_options->value;
+
+                        } elseif ( isset( $dt_record[ $dt_field_name ] ) && is_array( $dt_record[ $dt_field_name ] ) ) {
+                            $updated_fields[ $dt_field_name ][0] = [
+                                'value' => $applied_mapping_options->value,
+                                'key'   => $dt_record[ $dt_field_name ][0]['key']
+                            ];
+
+                        } elseif ( ! isset( $dt_record[ $dt_field_name ] ) ) {
+                            $updated_fields[ $dt_field_name ]['values'][0] = [
+                                'value' => $applied_mapping_options->value
+                            ];
+                        }
+                    }
                 }
             }
         }
@@ -441,4 +527,64 @@ function update_dt_record( $dt_record, $mc_record, $mappings ) {
     } else {
         return null;
     }
+}
+
+function matching_mc_field_value( $mc_record, $mc_field_id, $value ): bool {
+
+    $mc_field_value = ( $mc_field_id === 'EMAIL' ) ? $mc_record->email_address : $mc_record->merge_fields->{$mc_field_id};
+
+    return ( ! empty( $mc_field_value ) && ( $mc_field_value === $value ) );
+}
+
+function matching_dt_field_value( $dt_record, $dt_field_id, $value ): bool {
+
+    $dt_field = $dt_record[ $dt_field_id ];
+    if ( ! empty( $dt_field ) ) {
+
+        $dt_field_value = is_array( $dt_field ) ? $dt_field[0]['value'] : $dt_field;
+
+        return ( ! empty( $dt_field_value ) && ( $dt_field_value === $value ) );
+    }
+
+    return false;
+}
+
+function handle_dt_record_subscription( $dt_record, $mc_record ) {
+
+    // Simply echo back if dt record is empty
+    if ( empty( $dt_record ) ) {
+        return $dt_record;
+    }
+
+    // Determine current subscription status for both records
+    $is_mc_record_subscribed = strtolower( $mc_record->status ) === 'subscribed';
+    $is_dt_record_subscribed = is_dt_record_sync_enabled( $dt_record ) && in_array( $mc_record->list_id, $dt_record['dt_mailchimp_subscribed_mc_lists'] );
+    $subscription_mismatch   = $is_mc_record_subscribed !== $is_dt_record_subscribed;
+
+    // Ensure dt record's subscription status is kept in sync with mc record.
+    // See 'mailchimp-auto-subscribe.php' with regards to keeping mc record subscription state in sync with dt records.
+    if ( $subscription_mismatch ) {
+        $dt_fields = [];
+
+        if ( $is_mc_record_subscribed && ! $is_dt_record_subscribed ) {
+            $dt_fields['dt_mailchimp_subscribed_mc_lists']['values'][0] = [
+                'value' => $mc_record->list_id
+            ];
+
+        } elseif ( ! $is_mc_record_subscribed && $is_dt_record_subscribed ) {
+            $dt_fields['dt_mailchimp_subscribed_mc_lists']['values'][0] = [
+                'value'  => $mc_record->list_id,
+                'delete' => true
+            ];
+        }
+
+        if ( count( $dt_fields ) > 0 ) {
+            $updated_dt_record = DT_Posts::update_post( $dt_record['post_type'], $dt_record['ID'], $dt_fields, false, false );
+            if ( ! is_wp_error( $updated_dt_record ) ) {
+                return $updated_dt_record;
+            }
+        }
+    }
+
+    return $dt_record;
 }
