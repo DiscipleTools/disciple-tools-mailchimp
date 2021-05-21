@@ -157,17 +157,14 @@ function sync_mc_to_dt() {
                     $hidden_id_field_tag = Disciple_Tools_Mailchimp_API::get_default_list_hidden_id_field();
                     $dt_post_type_id     = $supported_mappings->{$mc_record->list_id}->dt_post_type;
 
-                    // If mc record does not have a hidden post id ref, then create a new corresponding dt record to twin with
-                    $dt_record        = null;
+                    // First, attempt to fetch corresponding dt record, using the info to hand!
+                    $dt_record = fetch_dt_record( $mc_record, $dt_post_type_id );
+
+                    // If still no hit, then a new dt record will be created
                     $is_new_dt_record = false;
-                    if ( ! isset( $mc_record->merge_fields->{$hidden_id_field_tag} ) || empty( $mc_record->merge_fields->{$hidden_id_field_tag} ) ) {
+                    if ( empty( $dt_record ) ) {
                         $dt_record        = create_dt_record( $mc_record, $dt_post_type_id );
                         $is_new_dt_record = true;
-
-                    } else {
-                        // Fetch corresponding dt post record and ensure it is to be kept in sync and it's subscribed
-                        $dt_post_id = $mc_record->merge_fields->{$hidden_id_field_tag};
-                        $dt_record  = DT_Posts::get_post( $dt_post_type_id, $dt_post_id, false, false );
                     }
 
                     // Handle dt record subscription status - Ensure it remains in sync with mc record
@@ -261,8 +258,27 @@ function is_dt_record_sync_enabled( $dt_post ): bool {
 }
 
 function fetch_mc_record( $dt_post_record, $mc_list_id ) {
-    // 1st - If present, search by email address
+
+    // 1st - If present, search by all dt record's email addresses
     $mc_record = fetch_mc_record_by_email( $dt_post_record, $mc_list_id );
+
+    // If we have a hit; ensure mc record's hidden id field is updated with dt record's post id
+    if ( ! empty( $mc_record ) ) {
+        $hidden_id_field_tag = Disciple_Tools_Mailchimp_API::get_default_list_hidden_id_field();
+
+        if ( $dt_post_record['ID'] !== $mc_record->merge_fields->{$hidden_id_field_tag} ) {
+
+            $mc_fields = [];
+            if ( Disciple_Tools_Mailchimp_API::has_list_got_hidden_id_fields( $mc_list_id ) ) {
+                $mc_fields['merge_fields'] = [
+                    $hidden_id_field_tag => $dt_post_record['ID']
+                ];
+
+                $mc_record->merge_fields->{$hidden_id_field_tag} = $dt_post_record['ID'];
+                Disciple_Tools_Mailchimp_API::update_list_member( $mc_list_id, $mc_record->id, $mc_fields );
+            }
+        }
+    }
 
     // 2nd - Failing 1st; search for dt record id within hidden mc fields
     if ( empty( $mc_record ) ) {
@@ -273,10 +289,16 @@ function fetch_mc_record( $dt_post_record, $mc_list_id ) {
 }
 
 function fetch_mc_record_by_email( $dt_post_record, $mc_list_id ) {
-    $email = extract_dt_record_email( $dt_post_record );
-    if ( isset( $email ) ) {
-        // Search Mailchimp for a corresponding record, based on email address
-        return Disciple_Tools_Mailchimp_API::find_list_member_by_email( $mc_list_id, $email );
+    $emails = extract_dt_record_emails( $dt_post_record, false );
+    if ( isset( $emails ) && ! empty( $emails ) ) {
+
+        // Search Mailchimp for a corresponding record, based on loop email address
+        foreach ( $emails as $email ) {
+            $mc_record = Disciple_Tools_Mailchimp_API::find_list_member_by_email( $mc_list_id, $email['value'] );
+            if ( ! empty( $mc_record ) ) {
+                return $mc_record;
+            }
+        }
     }
 
     return null;
@@ -286,9 +308,84 @@ function fetch_mc_record_by_hidden_fields( $dt_post_record, $mc_list_id ) {
     return Disciple_Tools_Mailchimp_API::find_list_member_by_hidden_id_fields( $mc_list_id, $dt_post_record['ID'] );
 }
 
+function fetch_dt_record( $mc_record, $dt_post_type_id ) {
+
+    $dt_record = null;
+
+    // 1st - If present, search for dt record using mc record's hidden post id
+    $hidden_id_field_tag = Disciple_Tools_Mailchimp_API::get_default_list_hidden_id_field();
+    if ( isset( $mc_record->merge_fields->{$hidden_id_field_tag} ) && ! empty( $mc_record->merge_fields->{$hidden_id_field_tag} ) ) {
+        $dt_post_id = intval( $mc_record->merge_fields->{$hidden_id_field_tag} );
+        $hit        = DT_Posts::get_post( $dt_post_type_id, $dt_post_id, false, false );
+
+        if ( ! empty( $hit ) && ! is_wp_error( $hit ) ) {
+            $dt_record = $hit;
+        }
+    }
+
+    // 2nd - Failing 1st, search for dt record using mc record's email address
+    if ( empty( $dt_record ) ) {
+        $dt_record = fetch_dt_record_by_email( $dt_post_type_id, $mc_record->email_address );
+
+        // If we have a hit; ensure mc record's hidden id field is updated with dt record's post id
+        if ( ! empty( $dt_record ) ) {
+            $hidden_id_field_tag = Disciple_Tools_Mailchimp_API::get_default_list_hidden_id_field();
+
+            if ( $dt_record['ID'] !== $mc_record->merge_fields->{$hidden_id_field_tag} ) {
+
+                $mc_fields = [];
+                if ( Disciple_Tools_Mailchimp_API::has_list_got_hidden_id_fields( $mc_record->list_id ) ) {
+                    $mc_fields['merge_fields'] = [
+                        $hidden_id_field_tag => $dt_record['ID']
+                    ];
+
+                    $mc_record->merge_fields->{$hidden_id_field_tag} = $dt_record['ID'];
+                    Disciple_Tools_Mailchimp_API::update_list_member( $mc_record->list_id, $mc_record->id, $mc_fields );
+                }
+            }
+        }
+    }
+
+    return $dt_record;
+}
+
+function fetch_dt_record_by_email( $dt_post_type_id, $email ) {
+    global $wpdb;
+
+    $dt_post_ids = $wpdb->get_results( $wpdb->prepare( "
+    SELECT post_id
+    FROM $wpdb->postmeta
+    WHERE (meta_key LIKE 'contact_email%') AND (meta_value = %s)
+    GROUP BY post_id", $email ) );
+
+    if ( ! empty( $dt_post_ids ) && count( $dt_post_ids ) > 0 ) {
+
+        $dt_posts = [];
+        foreach ( $dt_post_ids as $dt_post_id ) {
+            $hit = DT_Posts::get_post( $dt_post_type_id, $dt_post_id->post_id, false, false );
+
+            if ( ! empty( $hit ) && ! is_wp_error( $hit ) && ( strtolower( $hit['type']['key'] ) === 'access' ) ) {
+                $dt_posts[] = $hit;
+            }
+        }
+
+        // Assuming we have some hits, sort and return the most recently updated record
+        if ( count( $dt_posts ) > 0 ) {
+            usort( $dt_posts, function ( $a, $b ) {
+                return intval( $a['last_modified']['timestamp'] ) - intval( $b['last_modified']['timestamp'] );
+            } );
+
+            // Once sorted, return most recent..!
+            return $dt_posts[0];
+        }
+    }
+
+    return null;
+}
+
 function create_mc_record( $dt_post_record, $mc_list_id ) {
     // At the very least, an email address is required in order to create a new mc record
-    $email = extract_dt_record_email( $dt_post_record );
+    $email = extract_dt_record_emails( $dt_post_record, true );
     if ( isset( $email ) ) {
         $new_mc_record = [
             'email_address' => $email,
@@ -352,18 +449,14 @@ function create_dt_record( $mc_record, $dt_post_type ) {
     return null;
 }
 
-function extract_dt_record_email( $dt_post_record ) {
+function extract_dt_record_emails( $dt_post_record, $first_email_only ) {
 
-    // todo: logic might need a re-think; lets see how it holds up!
-
-    // First, determine dt record's post type settings
-    $post_type_settings = DT_Posts::get_post_settings( $dt_post_record['post_type'] );
-
-    // Next, determine if current record contains an email field and subsequent address
-    $email_field_name = strtolower( $post_type_settings['label_singular'] . '_email' );
-    if ( isset( $dt_post_record[ $email_field_name ] ) ) {
-        // Value found at idx 0 to be treated as primary email
-        return $dt_post_record[ $email_field_name ][0]['value'];
+    if ( isset( $dt_post_record['contact_email'] ) && ! empty( $dt_post_record['contact_email'] ) ) {
+        if ( $first_email_only ) {
+            return $dt_post_record['contact_email'][0]['value'];
+        } else {
+            return $dt_post_record['contact_email'];
+        }
     }
 
     return null;

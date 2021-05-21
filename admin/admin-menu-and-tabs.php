@@ -148,6 +148,14 @@ class Disciple_Tools_Mailchimp_Tab_General {
             update_option( 'dt_mailchimp_mc_api_key', isset( $_POST['mc_main_col_connect_mc_api_key'] ) ? sanitize_text_field( wp_unslash( $_POST['mc_main_col_connect_mc_api_key'] ) ) : '' );
             update_option( 'dt_mailchimp_mc_accept_sync', isset( $_POST['mc_main_col_connect_mc_accept_sync_feed'] ) ? 1 : 0 );
             update_option( 'dt_mailchimp_dt_push_sync', isset( $_POST['mc_main_col_connect_dt_push_sync_feed'] ) ? 1 : 0 );
+
+            if ( isset( $_POST['mc_main_col_connect_mc_to_dt_last_sync_run'] ) && ! empty( $_POST['mc_main_col_connect_mc_to_dt_last_sync_run'] ) ) {
+                update_option( 'dt_mailchimp_sync_last_run_ts_mc_to_dt', strtotime( sanitize_text_field( wp_unslash( $_POST['mc_main_col_connect_mc_to_dt_last_sync_run'] ) ) ) );
+            }
+
+            if ( isset( $_POST['mc_main_col_connect_dt_to_mc_last_sync_run'] ) && ! empty( $_POST['mc_main_col_connect_dt_to_mc_last_sync_run'] ) ) {
+                update_option( 'dt_mailchimp_sync_last_run_ts_dt_to_mc', strtotime( sanitize_text_field( wp_unslash( $_POST['mc_main_col_connect_dt_to_mc_last_sync_run'] ) ) ) );
+            }
         }
 
         // Supported Mailchimp Lists Updates
@@ -189,6 +197,12 @@ class Disciple_Tools_Mailchimp_Tab_General {
         $supported_lists = get_option( 'dt_mailchimp_mc_supported_lists' );
 
         return ! empty( $supported_lists ) ? $supported_lists : '[]';
+    }
+
+    private function fetch_last_sync_run( $option_name ): string {
+        $last_run = get_option( $option_name );
+
+        return ! empty( $last_run ) ? gmdate( 'Y-m-d\TH:i', $last_run ) : '1970-01-01T01:00';
     }
 
     public function main_column() {
@@ -320,17 +334,33 @@ class Disciple_Tools_Mailchimp_Tab_General {
                     </td>
                 </tr>
                 <tr>
-                    <td>Accept Mailchimp Sync Feeds</td>
+                    <td>Fetch Mailchimp Updates</td>
                     <td>
                         <input type="checkbox" id="mc_main_col_connect_mc_accept_sync_feed"
                                name="mc_main_col_connect_mc_accept_sync_feed" <?php echo esc_attr( $this->is_accept_mc_sync_enabled() ? 'checked' : '' ) ?> />
                     </td>
                 </tr>
                 <tr>
-                    <td>Push DT Sync Feeds</td>
+                    <td>Last Mailchimp to DT Sync Run</td>
+                    <td>
+                        <input type="datetime-local" id="mc_main_col_connect_mc_to_dt_last_sync_run"
+                               name="mc_main_col_connect_mc_to_dt_last_sync_run" min="1970-01-01T00:00"
+                               value="<?php echo esc_attr( $this->fetch_last_sync_run( 'dt_mailchimp_sync_last_run_ts_mc_to_dt' ) ) ?>"/>
+                    </td>
+                </tr>
+                <tr>
+                    <td>Push DT Updates</td>
                     <td>
                         <input type="checkbox" id="mc_main_col_connect_dt_push_sync_feed"
                                name="mc_main_col_connect_dt_push_sync_feed" <?php echo esc_attr( $this->is_push_dt_sync_enabled() ? 'checked' : '' ) ?> />
+                    </td>
+                </tr>
+                <tr>
+                    <td>Last DT to Mailchimp Sync Run</td>
+                    <td>
+                        <input type="datetime-local" id="mc_main_col_connect_dt_to_mc_last_sync_run"
+                               name="mc_main_col_connect_dt_to_mc_last_sync_run" min="1970-01-01T00:00"
+                               value="<?php echo esc_attr( $this->fetch_last_sync_run( 'dt_mailchimp_sync_last_run_ts_dt_to_mc' ) ) ?>"/>
                     </td>
                 </tr>
             </table>
@@ -1098,7 +1128,7 @@ class Disciple_Tools_Mailchimp_Tab_Mappings {
                         foreach ( $post_type['fields'] as $key => $field ) {
                             if ( in_array( $field['type'], $supported_field_types ) ) {
                                 $post_type_fields[] = (object) [
-                                    "id" => $key,
+                                    "id"   => $key,
                                     "type" => $field['type'],
                                     "name" => $field['name']
                                 ];
