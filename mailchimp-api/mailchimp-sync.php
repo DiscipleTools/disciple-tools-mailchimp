@@ -355,8 +355,8 @@ function fetch_dt_record_by_email( $dt_post_type_id, $email ) {
     $dt_post_ids = $wpdb->get_results( $wpdb->prepare( "
     SELECT post_id
     FROM $wpdb->postmeta
-    WHERE (meta_key LIKE 'contact_email%') AND (meta_value = %s)
-    GROUP BY post_id", $email ) );
+    WHERE (meta_key LIKE %s) AND (meta_value = %s)
+    GROUP BY post_id", 'contact_email%', $email ) );
 
     if ( ! empty( $dt_post_ids ) && count( $dt_post_ids ) > 0 ) {
 

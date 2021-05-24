@@ -33,14 +33,14 @@ if ( ! defined( 'ABSPATH' ) ) {
 /**
  * Gets the instance of the `Disciple_Tools_Mailchimp` class.
  *
+ * @return object|bool
  * @since  0.1
  * @access public
- * @return object|bool
  */
 function disciple_tools_mailchimp() {
     $disciple_tools_mailchimp_required_dt_theme_version = '1.0';
-    $wp_theme = wp_get_theme();
-    $version = $wp_theme->version;
+    $wp_theme                                           = wp_get_theme();
+    $version                                            = $wp_theme->version;
 
     /*
      * Check if the Disciple.Tools theme is loaded and is the latest required version
@@ -49,21 +49,23 @@ function disciple_tools_mailchimp() {
     if ( $is_theme_dt && version_compare( $version, $disciple_tools_mailchimp_required_dt_theme_version, "<" ) ) {
         add_action( 'admin_notices', 'disciple_tools_mailchimp_hook_admin_notice' );
         add_action( 'wp_ajax_dismissed_notice_handler', 'dt_hook_ajax_notice_handler' );
+
         return false;
     }
-    if ( !$is_theme_dt ){
+    if ( ! $is_theme_dt ) {
         return false;
     }
     /**
      * Load useful function from the theme
      */
-    if ( !defined( 'DT_FUNCTIONS_READY' ) ){
+    if ( ! defined( 'DT_FUNCTIONS_READY' ) ) {
         require_once get_template_directory() . '/dt-core/global-functions.php';
     }
 
     return Disciple_Tools_Mailchimp::instance();
 
 }
+
 add_action( 'after_setup_theme', 'disciple_tools_mailchimp', 20 );
 
 /**
@@ -75,22 +77,16 @@ add_action( 'after_setup_theme', 'disciple_tools_mailchimp', 20 );
 class Disciple_Tools_Mailchimp {
 
     private static $_instance = null;
+
     public static function instance() {
         if ( is_null( self::$_instance ) ) {
             self::$_instance = new self();
         }
+
         return self::$_instance;
     }
 
     private function __construct() {
-        $is_rest = dt_is_rest();
-        /**
-         * @todo Decide if you want to use the REST API example
-         * To remove: delete this following line and remove the folder named /rest-api
-         */
-        if ( $is_rest && strpos( dt_get_url_path(), 'disciple_tools_mailchimp_template' ) !== false ) {
-            require_once( 'rest-api/rest-api.php' ); // adds starter rest api class
-        }
 
         /**
          * @todo Decide if you want to create a new post type
@@ -99,30 +95,10 @@ class Disciple_Tools_Mailchimp {
         require_once( 'post-type/loader.php' ); // add starter post type extension to Disciple Tools system
 
         /**
-         * @todo Decide if you want to create a custom site-to-site link
-         * To remove: delete the line below and remove the folder named /site-link
-         */
-        require_once( 'site-link/custom-site-to-site-links.php' ); // add site to site link class and capabilities
-
-        /**
-         * @todo Decide if you want to add new charts to the metrics section
-         * To remove: delete the line below and remove the folder named /charts
-         */
-        if ( strpos( dt_get_url_path(), 'metrics' ) !== false || ( $is_rest && strpos( dt_get_url_path(), 'disciple-tools-mailchimp-metrics' ) !== false ) ){
-            require_once( 'charts/charts-loader.php' );  // add custom charts to the metrics area
-        }
-
-        /**
          * @todo Decide if you want to add a custom tile
          * To remove: delete the line below and remove the folder named /tile
          */
         require_once( 'tile/custom-tile.php' ); // add custom tile
-
-        /**
-         * @todo Decide if you want to create a magic link
-         * To remove: delete the line below and remove the folder named /magic-link
-         */
-        require_once( 'magic-link/magic-link.php' );
 
         /**
          * @todo Decide if you want to add a custom admin page in the admin area
@@ -174,9 +150,9 @@ class Disciple_Tools_Mailchimp {
     /**
      * Method that runs only when the plugin is activated.
      *
+     * @return void
      * @since  0.1
      * @access public
-     * @return void
      */
     public static function activation() {
         // add elements here that need to fire on activation
@@ -185,9 +161,9 @@ class Disciple_Tools_Mailchimp {
     /**
      * Method that runs only when the plugin is deactivated.
      *
+     * @return void
      * @since  0.1
      * @access public
-     * @return void
      */
     public static function deactivation() {
         // add functions here that need to happen on deactivation
@@ -197,21 +173,21 @@ class Disciple_Tools_Mailchimp {
     /**
      * Loads the translation files.
      *
+     * @return void
      * @since  0.1
      * @access public
-     * @return void
      */
     public function i18n() {
         $domain = 'disciple-tools-mailchimp';
-        load_plugin_textdomain( $domain, false, trailingslashit( dirname( plugin_basename( __FILE__ ) ) ). 'languages' );
+        load_plugin_textdomain( $domain, false, trailingslashit( dirname( plugin_basename( __FILE__ ) ) ) . 'languages' );
     }
 
     /**
      * Magic method to output a string if trying to use the object as a string.
      *
+     * @return string
      * @since  0.1
      * @access public
-     * @return string
      */
     public function __toString() {
         return 'disciple-tools-mailchimp';
@@ -220,9 +196,9 @@ class Disciple_Tools_Mailchimp {
     /**
      * Magic method to keep the object from being cloned.
      *
+     * @return void
      * @since  0.1
      * @access public
-     * @return void
      */
     public function __clone() {
         _doing_it_wrong( __FUNCTION__, 'Whoah, partner!', '0.1' );
@@ -231,9 +207,9 @@ class Disciple_Tools_Mailchimp {
     /**
      * Magic method to keep the object from being unserialized.
      *
+     * @return void
      * @since  0.1
      * @access public
-     * @return void
      */
     public function __wakeup() {
         _doing_it_wrong( __FUNCTION__, 'Whoah, partner!', '0.1' );
@@ -244,6 +220,7 @@ class Disciple_Tools_Mailchimp {
      *
      * @param string $method
      * @param array $args
+     *
      * @return null
      * @since  0.1
      * @access public
@@ -251,6 +228,7 @@ class Disciple_Tools_Mailchimp {
     public function __call( $method = '', $args = array() ) {
         _doing_it_wrong( "disciple_tools_mailchimp::" . esc_html( $method ), 'Method does not exist.', '0.1' );
         unset( $method, $args );
+
         return null;
     }
 }
@@ -264,21 +242,22 @@ register_deactivation_hook( __FILE__, [ 'Disciple_Tools_Mailchimp', 'deactivatio
 if ( ! function_exists( 'disciple_tools_mailchimp_hook_admin_notice' ) ) {
     function disciple_tools_mailchimp_hook_admin_notice() {
         global $disciple_tools_mailchimp_required_dt_theme_version;
-        $wp_theme = wp_get_theme();
+        $wp_theme        = wp_get_theme();
         $current_version = $wp_theme->version;
-        $message = "'Disciple Tools - Mailchimp' plugin requires 'Disciple Tools' theme to work. Please activate 'Disciple Tools' theme or make sure it is latest version.";
-        if ( $wp_theme->get_template() === "disciple-tools-theme" ){
+        $message         = "'Disciple Tools - Mailchimp' plugin requires 'Disciple Tools' theme to work. Please activate 'Disciple Tools' theme or make sure it is latest version.";
+        if ( $wp_theme->get_template() === "disciple-tools-theme" ) {
             $message .= ' ' . sprintf( esc_html( 'Current Disciple Tools version: %1$s, required version: %2$s' ), esc_html( $current_version ), esc_html( $disciple_tools_mailchimp_required_dt_theme_version ) );
         }
         // Check if it's been dismissed...
         if ( ! get_option( 'dismissed-disciple-tools-mailchimp', false ) ) { ?>
-            <div class="notice notice-error notice-disciple-tools-mailchimp is-dismissible" data-notice="disciple-tools-mailchimp">
-                <p><?php echo esc_html( $message );?></p>
+            <div class="notice notice-error notice-disciple-tools-mailchimp is-dismissible"
+                 data-notice="disciple-tools-mailchimp">
+                <p><?php echo esc_html( $message ); ?></p>
             </div>
             <script>
-                jQuery(function($) {
-                    $( document ).on( 'click', '.notice-disciple-tools-mailchimp .notice-dismiss', function () {
-                        $.ajax( ajaxurl, {
+                jQuery(function ($) {
+                    $(document).on('click', '.notice-disciple-tools-mailchimp .notice-dismiss', function () {
+                        $.ajax(ajaxurl, {
                             type: 'POST',
                             data: {
                                 action: 'dismissed_notice_handler',
@@ -296,10 +275,10 @@ if ( ! function_exists( 'disciple_tools_mailchimp_hook_admin_notice' ) ) {
 /**
  * AJAX handler to store the state of dismissible notices.
  */
-if ( ! function_exists( "dt_hook_ajax_notice_handler" )){
-    function dt_hook_ajax_notice_handler(){
+if ( ! function_exists( "dt_hook_ajax_notice_handler" ) ) {
+    function dt_hook_ajax_notice_handler() {
         check_ajax_referer( 'wp_rest_dismiss', 'security' );
-        if ( isset( $_POST["type"] ) ){
+        if ( isset( $_POST["type"] ) ) {
             $type = sanitize_text_field( wp_unslash( $_POST["type"] ) );
             update_option( 'dismissed-' . $type, true );
         }

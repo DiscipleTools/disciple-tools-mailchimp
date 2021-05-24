@@ -1,39 +1,58 @@
 [![Build Status](https://travis-ci.com/DiscipleTools/disciple-tools-mailchimp.svg?branch=master)](https://travis-ci.com/DiscipleTools/disciple-tools-mailchimp)
 
-# Disciple Tools - Name
+# Disciple Tools - Mailchimp
 
-Description Description Description Description Description Description Description
-Description Description Description Description Description Description Description
+Integrate your Mailchimp audience lists with Disciple Tools and keep contact information continuously in sync between the two platforms.
 
 ## Purpose
 
-Purpose purpose purpose purpose purpose purpose purpose purpose purpose purpose purpose
-Purpose purpose purpose purpose purpose purpose purpose purpose purpose purpose purpose
-
-Purpose purpose purpose purpose purpose purpose purpose purpose purpose purpose purpose
-Purpose purpose purpose purpose purpose purpose purpose purpose purpose purpose purpose
+This plugin further aids the marketing effort, by keeping mapped fields in sync across platforms, with little to no workflow disruption! New entries are automatically mirrored across both platforms!
 
 ## Usage
 
 #### Will Do
 
-- Item
-- Item
-- Item
+- Control sync direction - Therefore, only accept Mailchimp updates; or just push D.T. updates; or temporarily disable sync runs in both directions.
+- Specify sync run start points, enabling the initial setup of pre-existing lists.
+- Cherry-pick Mailchimp lists to be kept in sync.
+- Specify supported D.T. post types and field types.
+- Create sync mappings between Mailchimp list & D.T. fields.
+- Control sync direction at the field level.
+- Automatically keep mapped fields in sync across Mailchimp & D.T. platforms.
 
 #### Will Not Do
 
-- Item
-- Item
+- Does not sync user metadata information such as activity feeds.
 
 ## Requirements
 
 - Disciple Tools Theme installed on a Wordpress Server
+- An activated Mailchimp account, with a valid API key.
 
 ## Installing
 
 - Install as a standard Disciple.Tools/Wordpress plugin in the system Admin/Plugins area.
 - Requires the user role of Administrator.
+
+
+## Setup
+
+- Install the plugin. (You must be an administrator)
+- Activate the plugin.
+- Navigate to the Extensions (D.T) > Mailchimp menu item in the admin area.
+- Enter Mailchimp API key.
+- Disable sync update flags in both directions, during initial setup.
+- Specify sync run starting point timestamps and save updates.
+- Select supported Mailchimp lists and save update.
+- Generate hidden identifier fields for each supported Mailchimp list and save update.
+    - Ensure to take backups of any pre-existing Mailchimp lists prior to creation of hidden identifier fields.
+- Select supported D.T. post types and field types and save update.
+- Navigate to Mappings tab.
+- For each selected supported Mailchimp list, assign a D.T. post type and create sync field mappings.
+- Save mapping updates.
+- Once all sync field mappings have been created for all lists, enable sync update flags (General Tab), one direction at a time; until all records have been linked and initially sync'd.
+- Enable sync runs in both directions and have the plugin take it from there!
+
 
 ## Contribution
 
@@ -47,4 +66,8 @@ system for git. For a more details on contribution see the
 
 ## Screenshots
 
-![screenshot](documentation/community/starter-banners/banner-blue-green.png)
+![general-connectivity](documentation/community/mailchimp/general-connectivity.png)
+
+![general-supported](documentation/community/mailchimp/general-supported.png)
+
+![mappings-fields](documentation/community/mailchimp/mappings-fields.png)

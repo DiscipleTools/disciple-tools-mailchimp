@@ -27,9 +27,6 @@ class Disciple_Tools_Mailchimp_Tile {
      * @param string $post_type
      *
      * @return mixed
-     * @todo Change the tile key and tile label
-     *
-     * @todo Set the post-type to the target post-type (i.e. contacts, groups, trainings, etc.)
      */
     public function dt_details_additional_tiles( $tiles, $post_type = "" ) {
         if ( $post_type === "contacts" ) {
@@ -108,55 +105,6 @@ class Disciple_Tools_Mailchimp_Tile {
                     'key'   => $source_key,
                 ];
             }
-
-            /**
-             * This is an example of a key select field
-             *
-             * $fields["disciple_tools_mailchimp_keyselect"] = [
-             * 'name' => "Key Select",
-             * 'type' => 'key_select',
-             * "tile" => "disciple_tools_mailchimp",
-             * 'default' => [
-             * 'new'   => [
-             * "label" => _x( 'New', 'Training Status label', 'disciple_tools' ),
-             * "description" => _x( "New training added to the system", "Training Status field description", 'disciple_tools' ),
-             * 'color' => "#ff9800"
-             * ],
-             * 'proposed'   => [
-             * "label" => _x( 'Proposed', 'Training Status label', 'disciple_tools' ),
-             * "description" => _x( "This training has been proposed and is in initial conversations", "Training Status field description", 'disciple_tools' ),
-             * 'color' => "#ff9800"
-             * ],
-             * 'scheduled' => [
-             * "label" => _x( 'Scheduled', 'Training Status label', 'disciple_tools' ),
-             * "description" => _x( "This training is confirmed, on the calendar.", "Training Status field description", 'disciple_tools' ),
-             * 'color' => "#4CAF50"
-             * ],
-             * 'in_progress' => [
-             * "label" => _x( 'In Progress', 'Training Status label', 'disciple_tools' ),
-             * "description" => _x( "This training is confirmed, on the calendar, or currently active.", "Training Status field description", 'disciple_tools' ),
-             * 'color' => "#4CAF50"
-             * ],
-             * 'complete'     => [
-             * "label" => _x( "Complete", 'Training Status label', 'disciple_tools' ),
-             * "description" => _x( "This training has successfully completed", "Training Status field description", 'disciple_tools' ),
-             * 'color' => "#4CAF50"
-             * ],
-             * 'paused'       => [
-             * "label" => _x( 'Paused', 'Training Status label', 'disciple_tools' ),
-             * "description" => _x( "This contact is currently on hold. It has potential of getting scheduled in the future.", "Training Status field description", 'disciple_tools' ),
-             * 'color' => "#ff9800"
-             * ],
-             * 'closed'       => [
-             * "label" => _x( 'Closed', 'Training Status label', 'disciple_tools' ),
-             * "description" => _x( "This training is no longer going to happen.", "Training Status field description", 'disciple_tools' ),
-             * "color" => "#366184",
-             * ],
-             * ],
-             * 'icon' => get_template_directory_uri() . '/dt-assets/images/edit.svg',
-             * "default_color" => "#366184",
-             * ];
-             */
         }
 
         return $fields;
