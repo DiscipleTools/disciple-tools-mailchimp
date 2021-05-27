@@ -62,16 +62,16 @@ class Disciple_Tools_Mailchimp_Tile {
              * Mailchimp First & Last Name text fields
              */
             $fields['dt_mailchimp_fname'] = [
-                'name'        => __( 'First Name', 'disciple_tools' ),
-                'description' => _x( 'First Name', 'Optional Documentation', 'disciple_tools' ),
+                'name'        => __( 'Mailchimp - First Name', 'disciple_tools' ),
+                'description' => _x( 'Mailchimp - First Name', 'Optional Documentation', 'disciple_tools' ),
                 'type'        => 'text',
                 'default'     => '',
                 'tile'        => 'disciple_tools_mailchimp',
                 'icon'        => get_template_directory_uri() . '/dt-assets/images/name.svg',
             ];
             $fields['dt_mailchimp_lname'] = [
-                'name'        => __( 'Last Name', 'disciple_tools' ),
-                'description' => _x( 'Last Name', 'Optional Documentation', 'disciple_tools' ),
+                'name'        => __( 'Mailchimp - Last Name', 'disciple_tools' ),
+                'description' => _x( 'Mailchimp - Last Name', 'Optional Documentation', 'disciple_tools' ),
                 'type'        => 'text',
                 'default'     => '',
                 'tile'        => 'disciple_tools_mailchimp',
@@ -100,7 +100,7 @@ class Disciple_Tools_Mailchimp_Tile {
 
             $source_key = 'mailchimp';
             if ( ! isset( $fields["sources"]["default"][ $source_key ] ) ) {
-                $fields["sources"]["default"][] = [
+                $fields["sources"]["default"][ $source_key ] = [
                     'label' => 'Mailchimp',
                     'key'   => $source_key,
                 ];

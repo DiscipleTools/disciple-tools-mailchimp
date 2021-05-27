@@ -13,7 +13,6 @@ This plugin further aids the marketing effort, by keeping mapped fields in sync 
 #### Will Do
 
 - Control sync direction - Therefore, only accept Mailchimp updates; or just push D.T. updates; or temporarily disable sync runs in both directions.
-- Specify sync run start points, enabling the initial setup of pre-existing lists.
 - Cherry-pick Mailchimp lists to be kept in sync.
 - Specify supported D.T. post types and field types.
 - Create sync mappings between Mailchimp list & D.T. fields.
@@ -42,16 +41,15 @@ This plugin further aids the marketing effort, by keeping mapped fields in sync 
 - Navigate to the Extensions (D.T) > Mailchimp menu item in the admin area.
 - Enter Mailchimp API key.
 - Disable sync update flags in both directions, during initial setup.
-- Specify sync run starting point timestamps and save updates.
-- Select supported Mailchimp lists and save update.
-- Generate hidden identifier fields for each supported Mailchimp list and save update.
-    - Ensure to take backups of any pre-existing Mailchimp lists prior to creation of hidden identifier fields.
-- Select supported D.T. post types and field types and save update.
+- Save updates.
+- Ensure to take backups of any pre-existing Mailchimp lists prior to adding any supported lists.
+- Select and add supported Mailchimp lists.
+- Select and add supported D.T. post and field types.
 - Navigate to Mappings tab.
 - For each selected supported Mailchimp list, assign a D.T. post type and create sync field mappings.
 - Save mapping updates.
 - Once all sync field mappings have been created for all lists, enable sync update flags (General Tab), one direction at a time; until all records have been linked and initially sync'd.
-- Enable sync runs in both directions and have the plugin take it from there!
+- Finally, enable sync runs in both directions and have the plugin take it from there! :)
 
 
 ## Contribution

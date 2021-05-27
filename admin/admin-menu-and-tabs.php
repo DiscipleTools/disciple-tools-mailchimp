@@ -139,7 +139,16 @@ class Disciple_Tools_Mailchimp_Tab_General {
             </div><!--poststuff end -->
         </div><!-- wrap end -->
         <?php
-        $this->tab_scripts();
+
+        // Load scripts
+        $this->load_scripts();
+    }
+
+    private function load_scripts() {
+        wp_enqueue_script( 'dt_mailchimp_admin_general_scripts', plugin_dir_url( __FILE__ ) . 'js/scripts-admin-general.js', [
+            'jquery',
+            'lodash'
+        ], 1, true );
     }
 
     private function process_updates() {
@@ -148,26 +157,40 @@ class Disciple_Tools_Mailchimp_Tab_General {
             update_option( 'dt_mailchimp_mc_api_key', isset( $_POST['mc_main_col_connect_mc_api_key'] ) ? sanitize_text_field( wp_unslash( $_POST['mc_main_col_connect_mc_api_key'] ) ) : '' );
             update_option( 'dt_mailchimp_mc_accept_sync', isset( $_POST['mc_main_col_connect_mc_accept_sync_feed'] ) ? 1 : 0 );
             update_option( 'dt_mailchimp_dt_push_sync', isset( $_POST['mc_main_col_connect_dt_push_sync_feed'] ) ? 1 : 0 );
+        }
 
-            if ( isset( $_POST['mc_main_col_connect_mc_to_dt_last_sync_run'] ) && ! empty( $_POST['mc_main_col_connect_mc_to_dt_last_sync_run'] ) ) {
-                update_option( 'dt_mailchimp_sync_last_run_ts_mc_to_dt', strtotime( sanitize_text_field( wp_unslash( $_POST['mc_main_col_connect_mc_to_dt_last_sync_run'] ) ) ) );
-            }
+        // Available Mailchimp List Additions
+        if ( isset( $_POST['mc_main_col_available_nonce'] ) && wp_verify_nonce( sanitize_key( wp_unslash( $_POST['mc_main_col_available_nonce'] ) ), 'mc_main_col_available_nonce' ) ) {
 
-            if ( isset( $_POST['mc_main_col_connect_dt_to_mc_last_sync_run'] ) && ! empty( $_POST['mc_main_col_connect_dt_to_mc_last_sync_run'] ) ) {
-                update_option( 'dt_mailchimp_sync_last_run_ts_dt_to_mc', strtotime( sanitize_text_field( wp_unslash( $_POST['mc_main_col_connect_dt_to_mc_last_sync_run'] ) ) ) );
+            $selected_list_id   = ( isset( $_POST['mc_main_col_available_selected_list_id'] ) ) ? sanitize_text_field( wp_unslash( $_POST['mc_main_col_available_selected_list_id'] ) ) : '';
+            $selected_list_name = ( isset( $_POST['mc_main_col_available_selected_list_name'] ) ) ? sanitize_text_field( wp_unslash( $_POST['mc_main_col_available_selected_list_name'] ) ) : '';
+
+            if ( ! empty( $selected_list_id ) && ! empty( $selected_list_name ) ) {
+
+                // Fetch existing list of supported mc lists.
+                $supported_lists = json_decode( $this->fetch_mc_supported_lists() );
+
+                // Add/Overwrite selected list entry.
+                $supported_lists->{$selected_list_id} = (object) [
+                    'id'                     => $selected_list_id,
+                    'name'                   => $selected_list_name,
+                    'mc_to_dt_last_sync_run' => '',
+                    'dt_to_mc_last_sync_run' => ''
+                ];
+
+                // Save changes.
+                update_option( 'dt_mailchimp_mc_supported_lists', json_encode( $supported_lists ) );
+
+                // Automatically create Mailchimp hidden fields if required.
+                if ( ! Disciple_Tools_Mailchimp_API::has_list_got_hidden_id_fields( $selected_list_id ) ) {
+                    Disciple_Tools_Mailchimp_API::generate_list_hidden_id_fields( $selected_list_id );
+                }
             }
         }
 
         // Supported Mailchimp Lists Updates
         if ( isset( $_POST['mc_main_col_support_nonce'] ) && wp_verify_nonce( sanitize_key( wp_unslash( $_POST['mc_main_col_support_nonce'] ) ), 'mc_main_col_support_nonce' ) ) {
-            update_option( 'dt_mailchimp_mc_supported_lists', isset( $_POST['mc_main_col_support_mc_lists_hidden_current_mc_list'] ) ? sanitize_text_field( wp_unslash( $_POST['mc_main_col_support_mc_lists_hidden_current_mc_list'] ) ) : '[]' );
-        }
-
-        // Supported Mailchimp Lists With Hidden Identifier Fields
-        if ( isset( $_POST['mc_main_col_hidden_mc_list_id_fields_nonce'] ) && wp_verify_nonce( sanitize_key( wp_unslash( $_POST['mc_main_col_hidden_mc_list_id_fields_nonce'] ) ), 'mc_main_col_hidden_mc_list_id_fields_nonce' ) ) {
-            if ( isset( $_POST['mc_main_col_hidden_mc_list_fields_select_ele'] ) ) {
-                Disciple_Tools_Mailchimp_API::generate_list_hidden_id_fields( sanitize_text_field( wp_unslash( $_POST['mc_main_col_hidden_mc_list_fields_select_ele'] ) ) );
-            }
+            update_option( 'dt_mailchimp_mc_supported_lists', isset( $_POST['mc_main_col_support_mc_lists_hidden_current_mc_list'] ) ? sanitize_text_field( wp_unslash( $_POST['mc_main_col_support_mc_lists_hidden_current_mc_list'] ) ) : '{}' );
         }
 
         // Supported DT Post Type Updates
@@ -196,7 +219,7 @@ class Disciple_Tools_Mailchimp_Tab_General {
     private function fetch_mc_supported_lists(): string {
         $supported_lists = get_option( 'dt_mailchimp_mc_supported_lists' );
 
-        return ! empty( $supported_lists ) ? $supported_lists : '[]';
+        return ! empty( $supported_lists ) ? $supported_lists : '{}';
     }
 
     private function fetch_last_sync_run( $option_name ): string {
@@ -208,7 +231,7 @@ class Disciple_Tools_Mailchimp_Tab_General {
     public function main_column() {
         ?>
         <!-- Box -->
-        <table class="widefat striped">
+        <table id="mc_main_col_connect_table_section" class="widefat striped">
             <thead>
             <tr>
                 <th>Connectivity</th>
@@ -225,7 +248,24 @@ class Disciple_Tools_Mailchimp_Tab_General {
         <br>
         <!-- End Box -->
         <!-- Box -->
-        <table class="widefat striped">
+        <table id="mc_main_col_available_table_section" class="widefat striped">
+            <thead>
+            <tr>
+                <th>Available Mailchimp Lists</th>
+            </tr>
+            </thead>
+            <tbody>
+            <tr>
+                <td>
+                    <?php $this->main_column_available_mc_lists(); ?>
+                </td>
+            </tr>
+            </tbody>
+        </table>
+        <br>
+        <!-- End Box -->
+        <!-- Box -->
+        <table id="mc_main_col_support_table_section" class="widefat striped">
             <thead>
             <tr>
                 <th>Supported Mailchimp Lists</th>
@@ -242,24 +282,7 @@ class Disciple_Tools_Mailchimp_Tab_General {
         <br>
         <!-- End Box -->
         <!-- Box -->
-        <table class="widefat striped">
-            <thead>
-            <tr>
-                <th>Supported Mailchimp Lists With Hidden Identifier Fields</th>
-            </tr>
-            </thead>
-            <tbody>
-            <tr>
-                <td>
-                    <?php $this->main_column_hidden_mc_list_id_fields(); ?>
-                </td>
-            </tr>
-            </tbody>
-        </table>
-        <br>
-        <!-- End Box -->
-        <!-- Box -->
-        <table class="widefat striped">
+        <table id="mc_main_col_support_dt_post_types_table_section" class="widefat striped">
             <thead>
             <tr>
                 <th>Supported DT Post Types</th>
@@ -276,7 +299,7 @@ class Disciple_Tools_Mailchimp_Tab_General {
         <br>
         <!-- End Box -->
         <!-- Box -->
-        <table class="widefat striped">
+        <table id="mc_main_col_support_dt_field_types_table_section" class="widefat striped">
             <thead>
             <tr>
                 <th>Supported DT Field Types</th>
@@ -341,26 +364,10 @@ class Disciple_Tools_Mailchimp_Tab_General {
                     </td>
                 </tr>
                 <tr>
-                    <td>Last Mailchimp to DT Sync Run</td>
-                    <td>
-                        <input type="datetime-local" id="mc_main_col_connect_mc_to_dt_last_sync_run"
-                               name="mc_main_col_connect_mc_to_dt_last_sync_run" min="1970-01-01T00:00"
-                               value="<?php echo esc_attr( $this->fetch_last_sync_run( 'dt_mailchimp_sync_last_run_ts_mc_to_dt' ) ) ?>"/>
-                    </td>
-                </tr>
-                <tr>
                     <td>Push DT Updates</td>
                     <td>
                         <input type="checkbox" id="mc_main_col_connect_dt_push_sync_feed"
                                name="mc_main_col_connect_dt_push_sync_feed" <?php echo esc_attr( $this->is_push_dt_sync_enabled() ? 'checked' : '' ) ?> />
-                    </td>
-                </tr>
-                <tr>
-                    <td>Last DT to Mailchimp Sync Run</td>
-                    <td>
-                        <input type="datetime-local" id="mc_main_col_connect_dt_to_mc_last_sync_run"
-                               name="mc_main_col_connect_dt_to_mc_last_sync_run" min="1970-01-01T00:00"
-                               value="<?php echo esc_attr( $this->fetch_last_sync_run( 'dt_mailchimp_sync_last_run_ts_dt_to_mc' ) ) ?>"/>
                     </td>
                 </tr>
             </table>
@@ -373,33 +380,69 @@ class Disciple_Tools_Mailchimp_Tab_General {
         <?php
     }
 
-    private function main_column_supported_mc_lists() {
+    private function main_column_available_mc_lists() {
         ?>
-        <select style="min-width: 80%;" id="mc_main_col_support_mc_lists_select_mc_list"
-                name="mc_main_col_support_mc_lists_select_mc_list">
+        <select style="min-width: 80%;" id="mc_main_col_available_mc_lists_select_mc_list">
+
+            <option disabled selected value>-- select available mailchimp lists --</option>
+
             <?php
+            $supported_lists          = json_decode( $this->fetch_mc_supported_lists() );
             $current_backend_mc_lists = Disciple_Tools_Mailchimp_API::get_lists();
             if ( ! empty( $current_backend_mc_lists ) ) {
                 foreach ( $current_backend_mc_lists as $list ) {
-                    echo '<option value="' . esc_attr( $list->id ) . '">' . esc_attr( $list->name ) . '</option>';
+
+                    // No need to display already supported lists
+                    if ( ! isset( $supported_lists->{$list->id} ) ) {
+                        echo '<option value="' . esc_attr( $list->id ) . '">' . esc_attr( $list->name ) . '</option>';
+                    }
                 }
             }
             ?>
         </select>
 
         <span style="float:right;">
-            <a id="mc_main_col_support_mc_lists_select_mc_list_add"
+            <a id="mc_main_col_available_mc_lists_select_mc_list_add"
                class="button float-right"><?php esc_html_e( "Add", 'disciple_tools' ) ?></a>
         </span>
-        <br><br>
 
+        <form method="POST" id="mc_main_col_available_form">
+            <input type="hidden" id="mc_main_col_available_nonce" name="mc_main_col_available_nonce"
+                   value="<?php echo esc_attr( wp_create_nonce( 'mc_main_col_available_nonce' ) ) ?>"/>
+
+            <input type="hidden" value="" id="mc_main_col_available_selected_list_id"
+                   name="mc_main_col_available_selected_list_id"/>
+
+            <input type="hidden" value="" id="mc_main_col_available_selected_list_name"
+                   name="mc_main_col_available_selected_list_name"/>
+        </form>
+        <?php
+    }
+
+    private function main_column_supported_mc_lists() {
+        ?>
         <table id="mc_main_col_support_mc_lists_table" class="widefat striped">
+            <thead>
+            <tr>
+                <th>Name</th>
+                <th>Last MC to DT Sync Run</th>
+                <th>Last DT to MC Sync Run</th>
+                <th></th>
+            </tr>
+            </thead>
             <?php
             $supported_lists = json_decode( $this->fetch_mc_supported_lists() );
             if ( ! empty( $supported_lists ) ) {
                 foreach ( $supported_lists as $list ) {
                     echo '<tr>';
                     echo '<td style="vertical-align: middle;">' . esc_attr( $list->name ) . '</td>';
+
+                    $mc_to_dt_last_run = ! empty( $list->mc_to_dt_last_sync_run ) ? gmdate( 'Y-m-d h:i:s', $list->mc_to_dt_last_sync_run ) : '';
+                    echo '<td style="vertical-align: middle;">' . esc_attr( $mc_to_dt_last_run ) . '</td>';
+
+                    $dt_to_mc_last_run = ! empty( $list->dt_to_mc_last_sync_run ) ? gmdate( 'Y-m-d h:i:s', $list->dt_to_mc_last_sync_run ) : '';
+                    echo '<td style="vertical-align: middle;">' . esc_attr( $dt_to_mc_last_run ) . '</td>';
+
                     echo '<td>';
                     echo '<span style="float:right;"><a class="button float-right mc-main-col-support-mc-lists-table-row-remove-but">Remove</a></span>';
                     echo '<input type="hidden" id="mc_main_col_support_mc_lists_table_row_remove_hidden_id" value="' . esc_attr( $list->id ) . '">';
@@ -411,26 +454,23 @@ class Disciple_Tools_Mailchimp_Tab_General {
         </table>
         <br>
 
-        <form method="POST">
+        <form method="POST" id="mc_main_col_support_form">
             <input type="hidden" id="mc_main_col_support_nonce" name="mc_main_col_support_nonce"
                    value="<?php echo esc_attr( wp_create_nonce( 'mc_main_col_support_nonce' ) ) ?>"/>
 
             <input type="hidden" id="mc_main_col_support_mc_lists_hidden_current_mc_list"
                    name="mc_main_col_support_mc_lists_hidden_current_mc_list"
                    value="<?php echo esc_attr( $this->fetch_mc_supported_lists() ) ?>"/>
-
-            <span style="float:right;">
-                <button type="submit"
-                        class="button float-right"><?php esc_html_e( "Update", 'disciple_tools' ) ?></button>
-            </span>
         </form>
         <?php
     }
 
     private function main_column_supported_dt_post_types() {
         ?>
-        <select style="min-width: 80%;" id="mc_main_col_support_dt_post_types_select_ele"
-                name="mc_main_col_support_dt_post_types_select_ele">
+        <select style="min-width: 80%;" id="mc_main_col_support_dt_post_types_select_ele">
+
+            <option disabled selected value>-- select supported post types --</option>
+
             <?php
             $post_types = DT_Posts::get_post_types();
             if ( ! empty( $post_types ) ) {
@@ -450,7 +490,7 @@ class Disciple_Tools_Mailchimp_Tab_General {
 
         <table id="mc_main_col_support_dt_post_types_table" class="widefat striped">
             <tbody>
-            <?php $this->main_column_supported_dt_types_display_saved_types( ! empty( get_option( 'dt_mailchimp_dt_supported_post_types' ) ) ? json_decode( get_option( 'dt_mailchimp_dt_supported_post_types' ) ) : json_decode( '[]' ) ); ?>
+            <?php $this->main_column_supported_dt_types_display_saved_types( true, 'mc_main_col_support_dt_post_types_table', 'mc_main_col_support_dt_post_types_form', 'mc_main_col_support_dt_post_types_hidden', ! empty( get_option( 'dt_mailchimp_dt_supported_post_types' ) ) ? json_decode( get_option( 'dt_mailchimp_dt_supported_post_types' ) ) : json_decode( '[]' ) ); ?>
             </tbody>
         </table>
         <br>
@@ -462,19 +502,16 @@ class Disciple_Tools_Mailchimp_Tab_General {
 
             <input type="hidden" id="mc_main_col_support_dt_post_types_hidden"
                    name="mc_main_col_support_dt_post_types_hidden" value="[]"/>
-
-            <span style="float:right;">
-                <a id="mc_main_col_support_dt_post_types_update_but"
-                   class="button float-right"><?php esc_html_e( "Update", 'disciple_tools' ) ?></a>
-            </span>
         </form>
         <?php
     }
 
     private function main_column_supported_dt_field_types() {
         ?>
-        <select style="min-width: 80%;" id="mc_main_col_support_dt_field_types_select_ele"
-                name="mc_main_col_support_dt_field_types_select_ele">
+        <select style="min-width: 80%;" id="mc_main_col_support_dt_field_types_select_ele">
+
+            <option disabled selected value>-- select supported field types --</option>
+
             <?php
             $post_types = DT_Posts::get_post_types();
             if ( ! empty( $post_types ) ) {
@@ -500,7 +537,7 @@ class Disciple_Tools_Mailchimp_Tab_General {
 
         <table id="mc_main_col_support_dt_field_types_table" class="widefat striped">
             <tbody>
-            <?php $this->main_column_supported_dt_types_display_saved_types( ! empty( get_option( 'dt_mailchimp_dt_supported_field_types' ) ) ? json_decode( get_option( 'dt_mailchimp_dt_supported_field_types' ) ) : json_decode( '[]' ) ); ?>
+            <?php $this->main_column_supported_dt_types_display_saved_types( false, 'mc_main_col_support_dt_field_types_table', 'mc_main_col_support_dt_field_types_form', 'mc_main_col_support_dt_field_types_hidden', ! empty( get_option( 'dt_mailchimp_dt_supported_field_types' ) ) ? json_decode( get_option( 'dt_mailchimp_dt_supported_field_types' ) ) : json_decode( '[]' ) ); ?>
             </tbody>
         </table>
         <br>
@@ -512,21 +549,38 @@ class Disciple_Tools_Mailchimp_Tab_General {
 
             <input type="hidden" id="mc_main_col_support_dt_field_types_hidden"
                    name="mc_main_col_support_dt_field_types_hidden" value="[]"/>
-
-            <span style="float:right;">
-                <a id="mc_main_col_support_dt_field_types_update_but"
-                   class="button float-right"><?php esc_html_e( "Update", 'disciple_tools' ) ?></a>
-            </span>
         </form>
         <?php
     }
 
-    private function main_column_supported_dt_types_display_saved_types( $supported_types ) {
+    private function main_column_supported_dt_types_display_saved_types( $is_post_types, $dt_type_table, $dt_type_form, $dt_type_hidden_values, $supported_types ) {
+        /*
+         * Revert to and save defaults if no previous configs are detected.
+         * For example, initial setups!
+         */
+
+        if ( $is_post_types && count( $supported_types ) === 0 ) {
+            $supported_types = $this->default_dt_types( $is_post_types );
+            update_option( 'dt_mailchimp_dt_supported_post_types', json_encode( $supported_types ) );
+        }
+
+        if ( ! $is_post_types && count( $supported_types ) === 0 ) {
+            $supported_types = $this->default_dt_types( $is_post_types );
+            update_option( 'dt_mailchimp_dt_supported_field_types', json_encode( $supported_types ) );
+        }
+
+        /*
+         * Proceed with displaying of supported types.
+         */
+
         foreach ( $supported_types as $type ) {
             echo '<tr>';
-            echo '<td style="vertical-align: middle;">';
+            echo '<input type="hidden" id="mc_main_col_support_dt_type_table_hidden" value="' . esc_attr( $dt_type_table ) . '" />';
+            echo '<input type="hidden" id="mc_main_col_support_dt_type_form_hidden" value="' . esc_attr( $dt_type_form ) . '" />';
+            echo '<input type="hidden" id="mc_main_col_support_dt_type_values_hidden" value="' . esc_attr( $dt_type_hidden_values ) . '" />';
             echo '<input type="hidden" id="mc_main_col_support_dt_type_id_hidden" value="' . esc_attr( $type->id ) . '" />';
             echo '<input type="hidden" id="mc_main_col_support_dt_type_name_hidden" value="' . esc_attr( $type->name ) . '" />';
+            echo '<td style="vertical-align: middle;">';
             echo esc_attr( $type->name );
             echo '</td>';
             echo '<td>';
@@ -536,300 +590,56 @@ class Disciple_Tools_Mailchimp_Tab_General {
         }
     }
 
-    private function main_column_hidden_mc_list_id_fields() {
-        $supported_mc_lists_with_id_fields    = [];
-        $supported_mc_lists_without_id_fields = [];
+    private function default_dt_types( $is_post_types ): array {
 
-        ?>
-        <form method="POST" id="mc_main_col_hidden_mc_list_id_fields_form">
-            <input type="hidden" id="mc_main_col_hidden_mc_list_id_fields_nonce"
-                   name="mc_main_col_hidden_mc_list_id_fields_nonce"
-                   value="<?php echo esc_attr( wp_create_nonce( 'mc_main_col_hidden_mc_list_id_fields_nonce' ) ) ?>"/>
+        if ( $is_post_types ) {
+            return [
+                (object) [
+                    'id'   => 'contacts',
+                    'name' => 'Contacts'
+                ]
+            ];
 
-            <?php
-            /**
-             * Fetch supported mc lists and filter by the ones who have not yet
-             * generated their hidden id fields. If all lists have hidden id fields, then
-             * hide select generation option.
-             */
-
-            $supported_mc_lists = json_decode( $this->fetch_mc_supported_lists() );
-            if ( ! empty( $supported_mc_lists ) ) {
-                foreach ( $supported_mc_lists as $supported_mc_list ) {
-
-                    /**
-                     * Determine if list contains hidden fields or not!
-                     */
-
-                    if ( Disciple_Tools_Mailchimp_API::has_list_got_hidden_id_fields( $supported_mc_list->id ) ) {
-                        $supported_mc_lists_with_id_fields[] = $supported_mc_list;
-                    } else {
-                        $supported_mc_lists_without_id_fields[] = $supported_mc_list;
-                    }
-                }
-            }
-
-            /**
-             * Display supported mc lists which still require hidden id fields.
-             */
-
-            if ( count( $supported_mc_lists_without_id_fields ) > 0 ) {
-                ?>
-
-                <select style="min-width: 80%;" id="mc_main_col_hidden_mc_list_fields_select_ele"
-                        name="mc_main_col_hidden_mc_list_fields_select_ele">
-
-                    <?php
-                    foreach ( $supported_mc_lists_without_id_fields as $list_without_fields ) {
-                        echo '<option value="' . esc_attr( $list_without_fields->id ) . '">' . esc_attr( $list_without_fields->name ) . '</option>';
-                    }
-                    ?>
-
-                </select>
-
-                <span style="float:right;">
-                <button type="submit" id="mc_main_col_hidden_mc_list_fields_select_ele_generate"
-                        class="button float-right"><?php esc_html_e( "Generate", 'disciple_tools' ) ?></button>
-                </span>
-                <br><br>
-
-                <?php
-            }
-            ?>
-        </form>
-
-        <?php
-
-        /**
-         * Display supported mc lists which already contain required hidden id fields.
-         */
-
-        if ( count( $supported_mc_lists_with_id_fields ) > 0 ) {
-
-            ?>
-            <table id="mc_main_col_hidden_mc_list_fields_table" class="widefat striped">
-                <tbody>
-
-                <?php
-                foreach ( $supported_mc_lists_with_id_fields as $list_with_fields ) {
-                    echo '<tr><td>' . esc_attr( $list_with_fields->name ) . '</td></tr>';
-                }
-                ?>
-
-                </tbody>
-            </table>
-            <br>
-            <?php
+        } else {
+            return [
+                (object) [
+                    'id'   => 'text',
+                    'name' => 'text'
+                ],
+                (object) [
+                    'id'   => 'textarea',
+                    'name' => 'textarea'
+                ],
+                (object) [
+                    'id'   => 'boolean',
+                    'name' => 'boolean'
+                ],
+                (object) [
+                    'id'   => 'key_select',
+                    'name' => 'key_select'
+                ],
+                (object) [
+                    'id'   => 'multi_select',
+                    'name' => 'multi_select'
+                ],
+                (object) [
+                    'id'   => 'tags',
+                    'name' => 'tags'
+                ],
+                (object) [
+                    'id'   => 'communication_channel',
+                    'name' => 'communication_channel'
+                ],
+                (object) [
+                    'id'   => 'number',
+                    'name' => 'number'
+                ],
+                (object) [
+                    'id'   => 'date',
+                    'name' => 'date'
+                ]
+            ];
         }
-    }
-
-    private function tab_scripts() {
-        ?>
-        <script>
-            jQuery(function ($) {
-                $(document).on('click', '#mc_main_col_connect_mc_api_key_show', function () {
-                    let api_key_input_ele = $('#mc_main_col_connect_mc_api_key');
-                    let api_key_show_ele = $('#mc_main_col_connect_mc_api_key_show');
-
-                    if (api_key_show_ele.is(':checked')) {
-                        api_key_input_ele.attr('type', 'text');
-                    } else {
-                        api_key_input_ele.attr('type', 'password');
-                    }
-                });
-
-                $(document).on('click', '#mc_main_col_support_mc_lists_select_mc_list_add', function () {
-                    mc_list_add();
-                });
-
-                $(document).on('click', '.mc-main-col-support-mc-lists-table-row-remove-but', function (e) {
-                    mc_list_remove(e);
-                });
-
-                $(document).on('click', '#mc_main_col_support_dt_post_types_select_ele_add', function () {
-                    dt_type_add(
-                        'mc_main_col_support_dt_post_types_select_ele',
-                        'mc_main_col_support_dt_post_types_table'
-                    );
-                });
-
-                $(document).on('click', '#mc_main_col_support_dt_field_types_select_ele_add', function () {
-                    dt_type_add(
-                        'mc_main_col_support_dt_field_types_select_ele',
-                        'mc_main_col_support_dt_field_types_table'
-                    );
-                });
-
-                $(document).on('click', '.mc-main-col-support-dt-type-table-row-remove-but', function (e) {
-                    dt_type_remove(e);
-                });
-
-                $(document).on('click', '#mc_main_col_support_dt_post_types_update_but', function () {
-                    dt_type_update(
-                        'mc_main_col_support_dt_post_types_table',
-                        'mc_main_col_support_dt_post_types_form',
-                        'mc_main_col_support_dt_post_types_hidden'
-                    );
-                });
-
-                $(document).on('click', '#mc_main_col_support_dt_field_types_update_but', function () {
-                    dt_type_update(
-                        'mc_main_col_support_dt_field_types_table',
-                        'mc_main_col_support_dt_field_types_form',
-                        'mc_main_col_support_dt_field_types_hidden'
-                    );
-                });
-
-                function mc_list_add() {
-                    let selected_list_id = $('#mc_main_col_support_mc_lists_select_mc_list').val();
-                    let selected_list_name = $('#mc_main_col_support_mc_lists_select_mc_list option:selected').text();
-
-                    // Only proceed if we have a valid id
-                    if (selected_list_id.trim() === "") {
-                        return;
-                    }
-
-                    // Only add if not already assigned to supported list
-                    if (!mc_hidden_list_includes(selected_list_id)) {
-
-                        // Add to hidden current list array
-                        let current_list = mc_hidden_list_load();
-                        let list_obj = {
-                            id: selected_list_id,
-                            name: selected_list_name
-                        }
-                        current_list.push(list_obj);
-
-                        // Persist updates
-                        mc_hidden_list_save(current_list);
-
-                        // Update visual list of lists ;)
-                        table_row_add(list_obj);
-                    }
-                }
-
-                function mc_list_remove(evt) {
-                    let selected_list_id = evt.currentTarget.parentNode.parentNode.querySelector('#mc_main_col_support_mc_lists_table_row_remove_hidden_id').getAttribute('value');
-                    let selected_list_tr_ele = evt.currentTarget.parentNode.parentNode.parentNode;
-
-                    // Remove from hidden current list array
-                    mc_hidden_list_remove(selected_list_id);
-
-                    // Update visual list of lists ;)
-                    table_row_remove(selected_list_tr_ele);
-                }
-
-                function mc_hidden_list_load() {
-                    return JSON.parse($('#mc_main_col_support_mc_lists_hidden_current_mc_list').val())
-                }
-
-                function mc_hidden_list_save(updated_list) {
-                    $('#mc_main_col_support_mc_lists_hidden_current_mc_list').val(JSON.stringify(updated_list));
-                }
-
-                function mc_hidden_list_includes(id) {
-                    let found = false;
-                    let current_list = mc_hidden_list_load();
-                    for (let i = 0; i < current_list.length; i++) {
-                        if (current_list[i].id == id) {
-                            found = true;
-                            break;
-                        }
-                    }
-                    return found;
-                }
-
-                function mc_hidden_list_remove(id) {
-                    let current_list = mc_hidden_list_load();
-                    for (let i = 0; i < current_list.length; i++) {
-                        if (current_list[i].id == id) {
-                            current_list.splice(i, 1);
-                            mc_hidden_list_save(current_list);
-                            break;
-                        }
-                    }
-                }
-
-                function table_row_add(list_obj) {
-                    let html = '<tr>';
-                    html += '<td style="vertical-align: middle;">' + window.lodash.escape(list_obj.name) + '</td>';
-                    html += '<td>';
-                    html += '<span style="float:right;"><a class="button float-right mc-main-col-support-mc-lists-table-row-remove-but">Remove</a></span>';
-                    html += '<input type="hidden" id="mc_main_col_support_mc_lists_table_row_remove_hidden_id" value="' + window.lodash.escape(list_obj.id) + '">';
-                    html += '</td>';
-                    html += '</tr>';
-                    $('#mc_main_col_support_mc_lists_table').append(html);
-                }
-
-                function table_row_remove(row_ele) {
-                    row_ele.parentNode.removeChild(row_ele);
-                }
-
-                function dt_type_add(dt_type_select_ele, dt_type_table) {
-                    let selected_type_id = $('#' + dt_type_select_ele).val();
-                    let selected_type_name = $('#' + dt_type_select_ele + ' option:selected').text();
-
-                    // Only proceed if type has not already been assigned
-                    if (dt_type_add_already_assigned(selected_type_id, dt_type_table)) {
-                        return;
-                    }
-
-                    // Insert new type table row
-                    let html = '<tr>';
-                    html += '<td style="vertical-align: middle;">';
-                    html += '<input type="hidden" id="mc_main_col_support_dt_type_id_hidden" value="' + window.lodash.escape(selected_type_id) + '" />';
-                    html += '<input type="hidden" id="mc_main_col_support_dt_type_name_hidden" value="' + window.lodash.escape(selected_type_name) + '" />';
-                    html += window.lodash.escape(selected_type_name);
-                    html += '</td>';
-                    html += '<td>';
-                    html += '<span style="float:right;"><a class="button float-right mc-main-col-support-dt-type-table-row-remove-but">Remove</a></span>';
-                    html += '</td>';
-                    html += '</tr>';
-                    $('#' + dt_type_table).append(html);
-                }
-
-                function dt_type_add_already_assigned(selected_type_id, dt_type_table) {
-                    let assigned = false;
-
-                    $('#' + dt_type_table + ' > tbody > tr').each(function (idx, tr) {
-                        let dt_type_id = $(tr).find('#mc_main_col_support_dt_type_id_hidden').val();
-                        if (dt_type_id && dt_type_id === selected_type_id) {
-                            assigned = true;
-                        }
-                    });
-
-                    return assigned;
-                }
-
-                function dt_type_remove(evt) {
-                    let row = evt.currentTarget.parentNode.parentNode.parentNode;
-                    row.parentNode.removeChild(row);
-                }
-
-                function dt_type_update(dt_type_table, dt_type_form, dt_type_hidden) {
-                    let types = [];
-
-                    // Iterate and fetch specified types
-                    $('#' + dt_type_table + ' > tbody > tr').each(function (idx, tr) {
-                        let dt_type_id = $(tr).find('#mc_main_col_support_dt_type_id_hidden').val();
-                        let dt_type_name = $(tr).find('#mc_main_col_support_dt_type_name_hidden').val();
-
-                        types.push({
-                            "id": dt_type_id,
-                            "name": dt_type_name
-                        });
-                    });
-
-                    // Save updated types ready for posting
-                    $('#' + dt_type_hidden).val(JSON.stringify(types));
-
-                    // Trigger form post..!
-                    $('#' + dt_type_form).submit();
-                }
-
-            });
-        </script>
-        <?php
     }
 }
 
@@ -866,7 +676,16 @@ class Disciple_Tools_Mailchimp_Tab_Mappings {
             </div><!--poststuff end -->
         </div><!-- wrap end -->
         <?php
-        $this->tab_scripts();
+
+        // Load scripts
+        $this->load_scripts();
+    }
+
+    private function load_scripts() {
+        wp_enqueue_script( 'dt_mailchimp_admin_mappings_scripts', plugin_dir_url( __FILE__ ) . 'js/scripts-admin-mappings.js', [
+            'jquery',
+            'lodash'
+        ], 1, true );
     }
 
     private function process_updates() {
@@ -877,7 +696,7 @@ class Disciple_Tools_Mailchimp_Tab_Mappings {
     private function fetch_mc_supported_lists(): string {
         $supported_lists = get_option( 'dt_mailchimp_mc_supported_lists' );
 
-        return ! empty( $supported_lists ) ? $supported_lists : '[]';
+        return ! empty( $supported_lists ) ? $supported_lists : '{}';
     }
 
     private function fetch_selected_list(): string {
@@ -1013,7 +832,7 @@ class Disciple_Tools_Mailchimp_Tab_Mappings {
             <tbody>
             <tr>
                 <td>
-                    <?php $this->main_column_display_selected_list_field_mappings( $mc_list_id ); ?>
+                    <?php $this->main_column_display_selected_list_field_mappings( $mc_list_id, $mc_list_name ); ?>
                 </td>
             </tr>
             </tbody>
@@ -1021,14 +840,25 @@ class Disciple_Tools_Mailchimp_Tab_Mappings {
         <?php
     }
 
-    private function main_column_display_selected_list_field_mappings( $mc_list_id ) {
+    private function main_column_display_selected_list_field_mappings( $mc_list_id, $mc_list_name ) {
         ?>
+        Ensure post type to be assigned with Mailchimp list is selected. Please note, any future post type assignment changes will delete/reset previous field mappings.
+        <br><br>
+
         <select style="min-width: 100%;" id="mc_mappings_main_col_selected_mc_list_assigned_post_type">
             <option disabled selected value>-- select assigned post type --</option>
             <?php
-            // First, determine if there is already an assigned post type
+
+            // First, attempt to locate any previous mappings
+            $existing_mappings = ! empty( get_option( 'dt_mailchimp_mappings' ) ) ? json_decode( get_option( 'dt_mailchimp_mappings' ) ) : json_decode( '{}' );
+
+            // Revert to defaults if no mappings are detected
+            if ( ! isset( $existing_mappings->{$mc_list_id} ) || ! isset( $existing_mappings->{$mc_list_id}->mappings ) || count( $existing_mappings->{$mc_list_id}->mappings ) === 0 ) {
+                $existing_mappings = $this->default_mappings( $mc_list_id, $mc_list_name, $existing_mappings );
+            }
+
+            // Source assigned post type
             $assigned_post_type = '';
-            $existing_mappings  = ! empty( get_option( 'dt_mailchimp_mappings' ) ) ? json_decode( get_option( 'dt_mailchimp_mappings' ) ) : json_decode( '{}' );
             if ( isset( $existing_mappings->{$mc_list_id} ) ) {
                 $assigned_post_type = $existing_mappings->{$mc_list_id}->dt_post_type ?? '';
             }
@@ -1225,273 +1055,53 @@ class Disciple_Tools_Mailchimp_Tab_Mappings {
         }
     }
 
-    private function tab_scripts() {
-        ?>
-        <script>
-            jQuery(function ($) {
-                $(document).on('click', '#mc_mappings_main_col_selected_mc_list_add_mapping_but', function () {
-                    mc_list_mapping_add();
-                });
+    private function default_mappings( $mc_list_id, $mc_list_name, $existing_mappings ) {
 
-                $(document).on('click', '.mc-mappings-main-col-selected-mc-list-remove-mapping-but', function (e) {
-                    mc_list_mapping_remove(e);
-                });
+        // Fetch available Mailchimp fields associated with list id
+        $mc_list_fields = $this->main_column_display_selected_list_field_mappings_parsed_mc_fields( $mc_list_id );
 
-                $(document).on('click', '#mc_mappings_main_col_selected_mc_list_update_but', function () {
-                    mc_list_update();
-                });
+        // Iterate list, setting default values against pre-defined fields
+        $mappings = [];
+        foreach ( $mc_list_fields as $field ) {
 
-                $(document).on('change', '.mc-mappings-main-col-selected-mc-list-mappings-table-col-options-select-ele', function (e) {
-                    mapping_option_display_selected(e.currentTarget);
-                });
+            if ( ( $field->merge_id === 'EMAIL' ) || ( $field->merge_id === 'FNAME' ) || ( $field->merge_id === 'LNAME' ) ) {
 
-                $(document).on('click', '#mappings_option_field_sync_direction_remove_but', function () {
-                    mapping_option_field_sync_direction_remove();
-                });
+                $dt_field_id = '';
+                if ( $field->merge_id === 'EMAIL' ) {
+                    $dt_field_id = 'contact_email';
 
-                $(document).on('click', '#mappings_option_field_sync_direction_commit_but', function () {
-                    mapping_option_field_sync_direction_commit();
-                });
+                } elseif ( $field->merge_id === 'FNAME' ) {
+                    $dt_field_id = 'dt_mailchimp_fname';
 
-                function mc_list_mapping_add() {
-                    table_row_add();
-                }
-
-                function mc_list_mapping_remove(evt) {
-                    table_row_remove(evt.currentTarget.parentNode.parentNode.parentNode);
-                }
-
-                function table_row_add() {
-                    let mapping_id = Date.now();
-                    let html = '<tr>';
-                    html += '<input type="hidden" id="mc_mappings_main_col_selected_mc_list_mappings_table_row_mapping_id_hidden" value="' + mapping_id + '" />';
-                    html += '<td style="text-align: center;">' + mapping_id + '</td>';
-                    html += '<td style="text-align: center;">' + table_row_add_col_mc_fields() + '</td>';
-                    html += '<td style="text-align: center;">' + table_row_add_col_dt_fields() + '</td>';
-                    html += '<td style="text-align: center;">' + table_row_add_col_options() + '</td>';
-                    html += '<td><span style="float:right;"><a class="button float-right mc-mappings-main-col-selected-mc-list-remove-mapping-but">Remove</a></span></td>';
-                    html += '</tr>';
-                    $('#mc_mappings_main_col_selected_mc_list_mappings_table').append(html);
-                }
-
-                function table_row_add_col_mc_fields() {
-                    let mc_fields = JSON.parse($('#mc_mappings_main_col_selected_mc_list_fields_hidden').val());
-
-                    let html = '<select id ="mc_mappings_main_col_selected_mc_list_mappings_table_col_mc_fields_select_ele" style="max-width: 100px;">';
-                    for (let i = 0; i < mc_fields.length; i++) {
-                        html += '<option value="' + window.lodash.escape(mc_fields[i].merge_id) + '">' + window.lodash.escape(mc_fields[i].name) + '</option>';
-                    }
-                    html += '</select>';
-
-                    return html;
-                }
-
-                function table_row_add_col_dt_fields() {
-                    let dt_fields = JSON.parse($('#mc_mappings_main_col_selected_mc_list_dt_fields_hidden').val());
-
-                    let html = '<select id ="mc_mappings_main_col_selected_mc_list_mappings_table_col_dt_fields_select_ele" style="max-width: 100px;">';
-                    dt_fields.forEach(post_type => {
-                        // Post type section heading
-                        html += '<option disabled selected value>-- ' + window.lodash.escape(post_type.post_type_label) + ' --</option>';
-
-                        // Post type fields
-                        post_type.post_type_fields.forEach(field => {
-                            html += '<option value="' + window.lodash.escape(field.id) + '">' + window.lodash.escape(field.name) + '</option>';
-                        });
-                    });
-                    html += '</select>';
-
-                    return html;
-                }
-
-                function table_row_add_col_options() {
-                    let html = '<select id="mc_mappings_main_col_selected_mc_list_mappings_table_col_options_select_ele" class="mc-mappings-main-col-selected-mc-list-mappings-table-col-options-select-ele" style="max-width: 100px;">';
-                    html += '<option selected value="">-- select option --</option>';
-                    html += '<option value="field-sync-direction">Field Sync Directions</option>';
-                    html += '</select>';
-                    html += '<input id="mc_mappings_main_col_selected_mc_list_mappings_table_col_options_hidden" type="hidden" value="[]" />'
-
-                    return html;
-                }
-
-                function table_row_remove(row_ele) {
-                    row_ele.parentNode.removeChild(row_ele);
-                }
-
-                function mc_list_update() {
-                    let mappings = [];
-
-                    // Iterate over existing table mapping rows
-                    $('#mc_mappings_main_col_selected_mc_list_mappings_table > tbody > tr').each(function (idx, tr) {
-
-                        // Source current row values
-                        let mapping_id = $(tr).find('#mc_mappings_main_col_selected_mc_list_mappings_table_row_mapping_id_hidden').val();
-                        let mc_field_id = $(tr).find('#mc_mappings_main_col_selected_mc_list_mappings_table_col_mc_fields_select_ele').val();
-                        let dt_field_id = $(tr).find('#mc_mappings_main_col_selected_mc_list_mappings_table_col_dt_fields_select_ele').val();
-                        let options = JSON.parse($(tr).find('#mc_mappings_main_col_selected_mc_list_mappings_table_col_options_hidden').val());
-
-                        // Ensure key values present needed to form mapping
-                        if (mc_list_update_validate_values(mapping_id, mc_field_id, dt_field_id, options)) {
-
-                            // Create new mapping object and add to master mappings
-                            mappings.push({
-                                "mapping_id": mapping_id,
-                                "mc_field_id": mc_field_id,
-                                "dt_field_id": dt_field_id,
-                                "options": options
-                            });
-
-                        } else {
-                            console.log("Invalid values detected at index: " + idx);
-                        }
-                    });
-
-                    // Package within a mappings object
-                    let mappings_obj = {
-                        "mc_list_id": $('#mc_mappings_main_col_selected_mc_list_id_hidden').val(),
-                        "mc_list_name": $('#mc_mappings_main_col_selected_mc_list_name_hidden').val(),
-                        "dt_post_type": $('#mc_mappings_main_col_selected_mc_list_assigned_post_type').val(),
-                        "mappings": mappings
-                    }
-
-                    // Save updated mappings object
-                    $('#mc_mappings_main_col_selected_mc_list_mappings_hidden').val(JSON.stringify(mappings_obj));
-
-                    // Trigger form post..!
-                    $('#mc_mappings_main_col_selected_mc_list_update_form').submit();
+                } elseif ( $field->merge_id === 'LNAME' ) {
+                    $dt_field_id = 'dt_mailchimp_lname';
 
                 }
 
-                function mc_list_update_validate_values(mapping_id, mc_field_id, dt_field_id, options) {
-                    return ((mapping_id && mapping_id !== "") &&
-                        (mc_field_id && mc_field_id !== "") &&
-                        (dt_field_id && dt_field_id !== ""));
-                }
+                $epoch      = round( microtime( true ) * 1000 ) - rand( 0, 1000 );
+                $mappings[] = (object) [
+                    'mapping_id'  => $epoch,
+                    'mc_field_id' => $field->merge_id,
+                    'dt_field_id' => $dt_field_id,
+                    'options'     => []
+                ];
+            }
+        }
 
-                function mapping_option_load_option(selected, option_id) {
-                    let option_found = null;
-                    let options = JSON.parse(selected.parentNode.querySelector('#mc_mappings_main_col_selected_mc_list_mappings_table_col_options_hidden').value);
+        // Save any captured field mappings
+        if ( count( $mappings ) > 0 ) {
 
-                    // Loop over options in search of specific option
-                    options.forEach(option => {
-                        if ((option) && (option.id === option_id)) {
-                            option_found = option;
-                        }
-                    });
+            $existing_mappings->{$mc_list_id} = (object) [
+                'mc_list_id'   => $mc_list_id,
+                'mc_list_name' => $mc_list_name,
+                'dt_post_type' => 'contacts',
+                'mappings'     => $mappings
+            ];
 
-                    return option_found;
-                }
+            update_option( 'dt_mailchimp_mappings', json_encode( $existing_mappings ) );
+        }
 
-                function mapping_option_update_option(mapping_id, option_id, option, remove_only, callback) {
-                    $('#mc_mappings_main_col_selected_mc_list_mappings_table > tbody > tr').each(function (idx, tr) {
-                        if ($(tr).find('#mc_mappings_main_col_selected_mc_list_mappings_table_row_mapping_id_hidden').val() === mapping_id) {
-                            let options = JSON.parse($(tr).find('#mc_mappings_main_col_selected_mc_list_mappings_table_col_options_hidden').val());
-
-                            // Loop over options in search of previous option settings, to be removed
-                            options.forEach((option, opt_idx) => {
-                                if ((option) && (option.id === option_id)) {
-                                    options.splice(opt_idx, 1);
-                                }
-                            });
-
-                            // Add/Commit latest option settings and save back to hidden field, assuming it's a full update request
-                            if (!remove_only) {
-                                options.push(option);
-                            }
-                            $(tr).find('#mc_mappings_main_col_selected_mc_list_mappings_table_col_options_hidden').val(JSON.stringify(options));
-                        }
-                    });
-
-                    callback();
-                }
-
-                function mapping_option_display_selected(selected) {
-                    // Hide whatever is currently displayed, prior to showing recently selected
-                    $('#mappings_option_div').fadeOut('slow', function () {
-                        if (selected.value) {
-                            switch (selected.value) {
-                                case 'field-sync-direction':
-                                    mapping_option_field_sync_direction(selected);
-                                    break;
-                                default:
-                                    break;
-                            }
-                        }
-                    });
-                }
-
-                function mapping_option_field_sync_direction(selected) {
-
-                    // Fetch values
-                    let mappings_option_div = $('#mappings_option_div');
-                    let option_value = selected.value;
-                    let option_text = selected.options[selected.selectedIndex].text;
-                    let mapping_id = selected.parentNode.parentNode.querySelector('#mc_mappings_main_col_selected_mc_list_mappings_table_row_mapping_id_hidden').value;
-
-                    // Update main mapping options area with selected view display shape
-                    mappings_option_div.html($('#mappings_option_field_sync_direction').html());
-
-                    // Set key header fields
-                    $('#mappings_option_field_sync_direction_title').html(option_text);
-                    $('#mappings_option_field_sync_direction_mapping_id').html(mapping_id);
-                    $('#mappings_option_field_sync_direction_option_id_hidden').val(option_value);
-
-                    // Attempt to Load any saved options or revert to defaults
-                    let option = mapping_option_load_option(selected, option_value);
-
-                    let enabled = (option) ? option.enabled : true;
-                    let priority = (option) ? option.priority : 1;
-                    let mc_sync_feeds = (option) ? option.mc_sync_feeds : true;
-                    let dt_sync_feeds = (option) ? option.dt_sync_feeds : true;
-
-                    // Set visuals accordingly
-                    $('#mappings_option_field_sync_direction_enabled').prop('checked', enabled);
-                    $('#mappings_option_field_sync_direction_exec_priority').val(priority);
-                    $('#mappings_option_field_sync_direction_pull_mc').prop('checked', mc_sync_feeds);
-                    $('#mappings_option_field_sync_direction_push_dt').prop('checked', dt_sync_feeds);
-
-                    // Display selected mapping options view
-                    mappings_option_div.fadeIn('fast');
-                }
-
-                function mapping_option_field_sync_direction_commit() {
-
-                    // Capture current values
-                    let option_id = $('#mappings_option_field_sync_direction_option_id_hidden').val();
-                    let mapping_id = $('#mappings_option_field_sync_direction_mapping_id').html();
-                    let enabled = $('#mappings_option_field_sync_direction_enabled').prop('checked');
-                    let priority = $('#mappings_option_field_sync_direction_exec_priority').val();
-                    let mc_sync_feeds = $('#mappings_option_field_sync_direction_pull_mc').prop('checked');
-                    let dt_sync_feeds = $('#mappings_option_field_sync_direction_push_dt').prop('checked');
-
-                    mapping_option_update_option(mapping_id, option_id, {
-                        'id': option_id,
-                        'mapping_id': mapping_id,
-                        'enabled': enabled,
-                        'priority': priority,
-                        'mc_sync_feeds': mc_sync_feeds,
-                        'dt_sync_feeds': dt_sync_feeds
-
-                    }, false, function () {
-                        $('#mappings_option_div').fadeOut('fast', function () {
-                            $('#mappings_option_div').fadeIn('fast');
-                        });
-                    })
-                }
-
-                function mapping_option_field_sync_direction_remove() {
-
-                    // Capture current values
-                    let option_id = $('#mappings_option_field_sync_direction_option_id_hidden').val();
-                    let mapping_id = $('#mappings_option_field_sync_direction_mapping_id').html();
-
-                    mapping_option_update_option(mapping_id, option_id, null, true, function () {
-                        $('#mappings_option_div').fadeOut('slow');
-                    });
-                }
-            });
-        </script>
-        <?php
+        return $existing_mappings;
     }
 }
 

@@ -52,8 +52,8 @@ function sync_dt_to_mc() {
 
         sync_debug( 'dt_mailchimp_dt_debug', '' );
 
-        // Determine last run timestamp
-        $last_run = fetch_last_run( 'dt_mailchimp_sync_last_run_ts_dt_to_mc' );
+        // Determine global last run timestamp
+        $last_run = fetch_global_last_run( 'dt_mailchimp_sync_last_run_ts_dt_to_mc' );
 
         // Adjust run start sliding-window, so as to capture any stragglers, since last run
         $last_run_start_window = adjust_last_run_start_window( $last_run, 1 ); // 1Hr prior to last run
@@ -111,6 +111,12 @@ function sync_dt_to_mc() {
 
                                         $updated = update_mc_record( $subscribed_mc_list_id, $dt_post_record, $mc_record, $field_mappings );
                                         sync_debug( 'dt_mailchimp_dt_debug', $updated );
+
+                                        // Update last run timestamps, assuming we have valid updates
+                                        if ( ! empty( $updated ) ) {
+                                            update_global_last_run( 'dt_mailchimp_sync_last_run_ts_dt_to_mc', time() );
+                                            update_list_last_run( $subscribed_mc_list_id, 'dt_to_mc_last_sync_run', time() );
+                                        }
                                     }
                                 }
                             }
@@ -119,9 +125,6 @@ function sync_dt_to_mc() {
                 }
             }
         }
-
-        // Update last sync run timestamp
-        update_last_run( 'dt_mailchimp_sync_last_run_ts_dt_to_mc', time() );
     }
 }
 
@@ -130,8 +133,8 @@ function sync_mc_to_dt() {
 
         sync_debug( 'dt_mailchimp_mc_debug', '' );
 
-        // Determine last run timestamp
-        $last_run = fetch_last_run( 'dt_mailchimp_sync_last_run_ts_mc_to_dt' );
+        // Determine global last run timestamp
+        $last_run = fetch_global_last_run( 'dt_mailchimp_sync_last_run_ts_mc_to_dt' );
 
         // Adjust run start sliding-window, so as to capture any stragglers, since last run
         $last_run_start_window = adjust_last_run_start_window( $last_run, 1 ); // 1Hr prior to last run
@@ -182,14 +185,17 @@ function sync_mc_to_dt() {
                             // Update dt record
                             $updated = update_dt_record( $dt_record, $mc_record, $field_mappings );
                             sync_debug( 'dt_mailchimp_mc_debug', $updated );
+
+                            // Update last run timestamps, assuming we have valid updates
+                            if ( ! empty( $updated ) ) {
+                                update_global_last_run( 'dt_mailchimp_sync_last_run_ts_mc_to_dt', time() );
+                                update_list_last_run( $mc_record->list_id, 'mc_to_dt_last_sync_run', time() );
+                            }
                         }
                     }
                 }
             }
         }
-
-        // Update last sync run timestamp
-        update_last_run( 'dt_mailchimp_sync_last_run_ts_mc_to_dt', time() );
     }
 }
 
@@ -209,14 +215,32 @@ function fetch_supported_mappings() {
     return json_decode( get_option( 'dt_mailchimp_mappings' ) );
 }
 
-function update_last_run( $option_name, $timestamp ) {
+function update_global_last_run( $option_name, $timestamp ) {
     update_option( $option_name, $timestamp );
 }
 
-function fetch_last_run( $option_name ): int {
+function fetch_global_last_run( $option_name ): int {
     $last_run = get_option( $option_name );
 
-    return ! empty( $last_run ) ? intval( $last_run ) : time();
+    // Cater for first run states; which should force the initial linking of records across both platforms;
+    // ...From a really long time ago...! ;)
+    return ! empty( $last_run ) ? intval( $last_run ) : 946684800; // Start: 1 January 2000 00:00:00
+}
+
+function update_list_last_run( $mc_list_id, $option_name, $timestamp ) {
+
+    // Only update if we have an existing entry
+    $supported_lists = get_option( 'dt_mailchimp_mc_supported_lists' );
+    if ( ! empty( $supported_lists ) ) {
+
+        $lists = json_decode( $supported_lists );
+        if ( isset( $lists->{$mc_list_id} ) ) {
+            $lists->{$mc_list_id}->{$option_name} = $timestamp;
+
+            // Save updated list last run
+            update_option( 'dt_mailchimp_mc_supported_lists', json_encode( $lists ) );
+        }
+    }
 }
 
 function fetch_supported_array( $option_name, $ids_only = true ): array {
@@ -416,8 +440,8 @@ function create_dt_record( $mc_record, $dt_post_type ) {
         // Prepare initial dt fields
         $dt_fields = [];
 
-        $dt_fields['type']                 = 'access';
-        $dt_fields['sources']['values'][0] = [
+        $dt_fields['type']                = 'access';
+        $dt_fields['sources']['values'][] = [
             'value' => 'mailchimp'
         ];
 

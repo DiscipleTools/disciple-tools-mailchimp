@@ -1,7 +1,6 @@
 vendor/*
 !vendor/autoload.php
 !vendor/composer
-!vendor/dealerdirect
 !vendor/guzzlehttp
 !vendor/mailchimp
 !vendor/psr
