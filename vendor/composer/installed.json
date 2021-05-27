@@ -644,7 +644,7 @@
             "install-path": "../wp-coding-standards/wpcs"
         }
     ],
-    "dev": true,
+    "dev": false,
     "dev-package-names": [
         "dealerdirect/phpcodesniffer-composer-installer",
         "squizlabs/php_codesniffer",
