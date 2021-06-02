@@ -175,7 +175,8 @@ class Disciple_Tools_Mailchimp_Tab_General {
                     'id'                     => $selected_list_id,
                     'name'                   => $selected_list_name,
                     'mc_to_dt_last_sync_run' => '',
-                    'dt_to_mc_last_sync_run' => ''
+                    'dt_to_mc_last_sync_run' => '',
+                    'log'                    => ''
                 ];
 
                 // Save changes.
@@ -271,7 +272,7 @@ class Disciple_Tools_Mailchimp_Tab_General {
         <table id="mc_main_col_available_table_section" class="widefat striped">
             <thead>
             <tr>
-                <th>Available Mailchimp Lists</th>
+                <th>Select Mailchimp Lists To Sync</th>
             </tr>
             </thead>
             <tbody>
@@ -305,7 +306,7 @@ class Disciple_Tools_Mailchimp_Tab_General {
         <table id="mc_main_col_support_dt_post_types_table_section" class="widefat striped">
             <thead>
             <tr>
-                <th>Supported DT Post Types</th>
+                <th>[Advanced Options] Supported DT Post Types</th>
             </tr>
             </thead>
             <tbody>
@@ -322,7 +323,7 @@ class Disciple_Tools_Mailchimp_Tab_General {
         <table id="mc_main_col_support_dt_field_types_table_section" class="widefat striped">
             <thead>
             <tr>
-                <th>Supported DT Field Types</th>
+                <th>[Advanced Options] Supported DT Field Types</th>
             </tr>
             </thead>
             <tbody>
@@ -390,17 +391,6 @@ class Disciple_Tools_Mailchimp_Tab_General {
                                name="mc_main_col_connect_dt_push_sync_feed" <?php echo esc_attr( $this->is_push_dt_sync_enabled() ? 'checked' : '' ) ?> />
                     </td>
                 </tr>
-                <tr>
-                    <td>&nbsp</td>
-                    <td></td>
-                </tr>
-                <tr>
-                    <td colspan="2">
-                        <span style="color: #0a4b78">
-                            <?php echo esc_html( $this->main_column_connectivity_logging() ) ?>
-                        </span>
-                    </td>
-                </tr>
             </table>
             <br>
             <span style="float:right;">
@@ -411,44 +401,11 @@ class Disciple_Tools_Mailchimp_Tab_General {
         <?php
     }
 
-    private function main_column_connectivity_logging(): string {
-
-        $log           = '';
-        $no_debug_msgs = empty( get_option( 'dt_mailchimp_dt_debug' ) ) && empty( get_option( 'dt_mailchimp_mc_debug' ) ) && empty( get_option( 'dt_mailchimp_subscribe_debug' ) );
-        if ( $no_debug_msgs && ( $this->is_accept_mc_sync_enabled() && $this->is_push_dt_sync_enabled() ) ) {
-            $log = 'Successfully synchronising in both [MC to DT] and [DT to MC] directions.';
-
-        } elseif ( $no_debug_msgs && $this->is_accept_mc_sync_enabled() ) {
-            $log = 'Successfully synchronising in [MC to DT] direction.';
-
-        } elseif ( $no_debug_msgs && $this->is_push_dt_sync_enabled() ) {
-            $log = 'Successfully synchronising in [DT to MC] direction.';
-
-        } elseif ( $no_debug_msgs && ! ( $this->is_accept_mc_sync_enabled() && $this->is_push_dt_sync_enabled() ) ) {
-            $log = 'Synchronising currently disabled!';
-
-        } elseif ( ! $no_debug_msgs ) {
-
-            $log = 'Exceptions detected: ';
-            if ( ! empty( get_option( 'dt_mailchimp_dt_debug' ) ) ) {
-                $log .= get_option( 'dt_mailchimp_dt_debug' );
-
-            } elseif ( ! empty( get_option( 'dt_mailchimp_mc_debug' ) ) ) {
-                $log .= get_option( 'dt_mailchimp_mc_debug' );
-
-            } elseif ( ! empty( get_option( 'dt_mailchimp_subscribe_debug' ) ) ) {
-                $log .= get_option( 'dt_mailchimp_subscribe_debug' );
-            }
-        }
-
-        return $log;
-    }
-
     private function main_column_available_mc_lists() {
         ?>
         <select style="min-width: 80%;" id="mc_main_col_available_mc_lists_select_mc_list">
 
-            <option disabled selected value>-- select available mailchimp lists --</option>
+            <option disabled selected value>-- available mailchimp lists --</option>
 
             <?php
             $supported_lists          = json_decode( $this->fetch_mc_supported_lists() );
@@ -485,34 +442,37 @@ class Disciple_Tools_Mailchimp_Tab_General {
 
     private function main_column_supported_mc_lists() {
         ?>
-        Ensure corresponding field mappings have been created for all supported Mailchimp lists!
-        <br><br>
         <table id="mc_main_col_support_mc_lists_table" class="widefat striped">
             <thead>
             <tr>
-                <th>Name</th>
-                <th>Mappings</th>
-                <th>MC to DT Last Run</th>
-                <th>DT to MC Last Run</th>
+                <th style="vertical-align: middle; text-align: center;">Name</th>
+                <th style="vertical-align: middle; text-align: center;">Mappings</th>
+                <th style="vertical-align: middle; text-align: center;">Sync Status</th>
+                <th style="vertical-align: middle; text-align: center;">MC to DT Last Run</th>
+                <th style="vertical-align: middle; text-align: center;">DT to MC Last Run</th>
                 <th></th>
             </tr>
             </thead>
             <?php
-            $supported_lists = json_decode( $this->fetch_mc_supported_lists() );
+            $existing_mappings = ! empty( get_option( 'dt_mailchimp_mappings' ) ) ? json_decode( get_option( 'dt_mailchimp_mappings' ) ) : json_decode( '{}' );
+            $supported_lists   = json_decode( $this->fetch_mc_supported_lists() );
             if ( ! empty( $supported_lists ) ) {
                 foreach ( $supported_lists as $list ) {
                     echo '<tr>';
-                    echo '<td style="vertical-align: middle;">' . esc_attr( $list->name ) . '</td>';
+                    echo '<td style="vertical-align: middle; text-align: center;">' . esc_attr( $list->name ) . '</td>';
 
-                    echo '<td style="vertical-align: middle; text-align: center;"><a href="admin.php?page=disciple_tools_mailchimp&tab=mappings&gen_tab_mc_list_id=' . esc_attr( $list->id ) . '">View</a></td>';
+                    $mapping_action = ( ! isset( $existing_mappings->{$list->id} ) || ! isset( $existing_mappings->{$list->id}->mappings ) || count( $existing_mappings->{$list->id}->mappings ) === 0 ) ? 'Create Mappings' : 'View';
+                    echo '<td style="vertical-align: middle; text-align: center;"><a href="admin.php?page=disciple_tools_mailchimp&tab=mappings&gen_tab_mc_list_id=' . esc_attr( $list->id ) . '">' . esc_attr( $mapping_action ) . '</a></td>';
+
+                    echo '<td style="vertical-align: middle; text-align: center;">' . esc_attr( $this::main_column_supported_mc_lists_logging( $list->id ) ) . '</td>';
 
                     $mc_to_dt_last_run = ! empty( $list->mc_to_dt_last_sync_run ) ? gmdate( 'Y-m-d h:i:s', $list->mc_to_dt_last_sync_run ) : '';
-                    echo '<td style="vertical-align: middle;">' . esc_attr( $mc_to_dt_last_run ) . '</td>';
+                    echo '<td style="vertical-align: middle; text-align: center;">' . esc_attr( $mc_to_dt_last_run ) . '</td>';
 
                     $dt_to_mc_last_run = ! empty( $list->dt_to_mc_last_sync_run ) ? gmdate( 'Y-m-d h:i:s', $list->dt_to_mc_last_sync_run ) : '';
-                    echo '<td style="vertical-align: middle;">' . esc_attr( $dt_to_mc_last_run ) . '</td>';
+                    echo '<td style="vertical-align: middle; text-align: center;">' . esc_attr( $dt_to_mc_last_run ) . '</td>';
 
-                    echo '<td>';
+                    echo '<td style="vertical-align: middle;">';
                     echo '<span style="float:right;"><a class="button float-right mc-main-col-support-mc-lists-table-row-remove-but">Remove</a></span>';
                     echo '<input type="hidden" id="mc_main_col_support_mc_lists_table_row_remove_hidden_id" value="' . esc_attr( $list->id ) . '">';
                     echo '</td>';
@@ -532,6 +492,47 @@ class Disciple_Tools_Mailchimp_Tab_General {
                    value="<?php echo esc_attr( $this->fetch_mc_supported_lists() ) ?>"/>
         </form>
         <?php
+    }
+
+    private function main_column_supported_mc_lists_logging( $mc_list_id ): string {
+
+        // Field Mappings Needed
+        $existing_mappings = ! empty( get_option( 'dt_mailchimp_mappings' ) ) ? json_decode( get_option( 'dt_mailchimp_mappings' ) ) : json_decode( '{}' );
+        if ( ! isset( $existing_mappings->{$mc_list_id} ) || ! isset( $existing_mappings->{$mc_list_id}->mappings ) || count( $existing_mappings->{$mc_list_id}->mappings ) === 0 ) {
+            return 'Field Mappings Needed';
+        }
+
+        // Sync Scheduled
+        $supported_lists = json_decode( $this->fetch_mc_supported_lists() );
+        if ( isset( $supported_lists->{$mc_list_id} ) ) {
+            if ( empty( $supported_lists->{$mc_list_id}->mc_to_dt_last_sync_run ) && empty( $supported_lists->{$mc_list_id}->dt_to_mc_last_sync_run ) ) {
+                return 'Sync Scheduled';
+            }
+
+            // Logging Detected
+            if ( ! empty( $supported_lists->{$mc_list_id}->log ) ) {
+                return $supported_lists->{$mc_list_id}->log;
+            }
+
+            // Last Synced at Y-m-d h:i:s
+            if ( ! empty( $supported_lists->{$mc_list_id}->mc_to_dt_last_sync_run ) && ! empty( $supported_lists->{$mc_list_id}->dt_to_mc_last_sync_run ) ) {
+                if ( $supported_lists->{$mc_list_id}->mc_to_dt_last_sync_run >= $supported_lists->{$mc_list_id}->dt_to_mc_last_sync_run ) {
+                    return 'Last Synced at ' . gmdate( 'Y-m-d h:i:s', $supported_lists->{$mc_list_id}->mc_to_dt_last_sync_run );
+                } else {
+                    return 'Last Synced at ' . gmdate( 'Y-m-d h:i:s', $supported_lists->{$mc_list_id}->dt_to_mc_last_sync_run );
+                }
+            }
+
+            if ( ! empty( $supported_lists->{$mc_list_id}->mc_to_dt_last_sync_run ) ) {
+                return 'Last Synced at ' . gmdate( 'Y-m-d h:i:s', $supported_lists->{$mc_list_id}->mc_to_dt_last_sync_run );
+            }
+
+            if ( ! empty( $supported_lists->{$mc_list_id}->dt_to_mc_last_sync_run ) ) {
+                return 'Last Synced at ' . gmdate( 'Y-m-d h:i:s', $supported_lists->{$mc_list_id}->dt_to_mc_last_sync_run );
+            }
+        }
+
+        return '---';
     }
 
     private function main_column_supported_dt_post_types() {

@@ -38,11 +38,13 @@ function dt_mailchimp_auto_subscribe( $post_type, $post_id, $initial_fields, $ex
 
                     if ( ! empty( $updated_mc_record ) ) {
                         update_global_last_run( 'dt_mailchimp_sync_last_run_ts_dt_to_mc', time() );
-                        update_list_last_run( $mc_list_id, 'dt_to_mc_last_sync_run', time() );
+                        update_list_option_value( $mc_list_id, 'dt_to_mc_last_sync_run', time() );
+                        update_list_option_value( $mc_list_id, 'log', '' );
                         update_option( 'dt_mailchimp_subscribe_debug', '' );
 
                     } else {
                         update_option( 'dt_mailchimp_subscribe_debug', 'Auto-Subscribe sync failed for mc list ' . $mc_list_id . ' record [id:' . $mc_record->id . '] based on dt record [id:' . $post_id . ']' );
+                        update_list_option_value( $mc_list_id, 'log', 'Auto-Subscribe sync failed for mc record [id:' . $mc_record->id . '] based on dt record [id:' . $post_id . ']' );
                     }
                 }
             }

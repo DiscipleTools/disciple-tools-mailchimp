@@ -112,12 +112,14 @@ function sync_dt_to_mc() {
                                         // Update last run timestamps, assuming we have valid updates
                                         if ( ! empty( $updated ) ) {
                                             update_global_last_run( 'dt_mailchimp_sync_last_run_ts_dt_to_mc', time() );
-                                            update_list_last_run( $subscribed_mc_list_id, 'dt_to_mc_last_sync_run', time() );
+                                            update_list_option_value( $subscribed_mc_list_id, 'dt_to_mc_last_sync_run', time() );
+                                            update_list_option_value( $subscribed_mc_list_id, 'log', '' );
                                             sync_debug( 'dt_mailchimp_dt_debug', '' );
                                         }
                                     }
                                 } else {
                                     sync_debug( 'dt_mailchimp_dt_debug', 'Unable to locate/create a valid mc list ' . $subscribed_mc_list_id . ' record, based on dt record [id:' . $dt_post_record['ID'] . ' ].' );
+                                    update_list_option_value( $subscribed_mc_list_id, 'log', 'Unable to locate/create a valid mc record, based on dt record [id:' . $dt_post_record['ID'] . ' ].' );
                                 }
                             }
                         }
@@ -186,12 +188,14 @@ function sync_mc_to_dt() {
                             // Update last run timestamps, assuming we have valid updates
                             if ( ! empty( $updated ) ) {
                                 update_global_last_run( 'dt_mailchimp_sync_last_run_ts_mc_to_dt', time() );
-                                update_list_last_run( $mc_record->list_id, 'mc_to_dt_last_sync_run', time() );
+                                update_list_option_value( $mc_record->list_id, 'mc_to_dt_last_sync_run', time() );
+                                update_list_option_value( $mc_record->list_id, 'log', '' );
                                 sync_debug( 'dt_mailchimp_mc_debug', '' );
                             }
                         }
                     } elseif ( empty( $dt_record ) ) {
                         sync_debug( 'dt_mailchimp_mc_debug', 'Unable to locate/create a valid dt record for mc list ' . $mc_record->list_id . ' record [id:' . $mc_record->id . ']' );
+                        update_list_option_value( $mc_record->list_id, 'log', 'Unable to locate/create a valid dt record for mc record [id:' . $mc_record->id . ']' );
                     }
                 }
             }
@@ -227,7 +231,7 @@ function fetch_global_last_run( $option_name ): int {
     return ! empty( $last_run ) ? intval( $last_run ) : 946684800; // Start: 1 January 2000 00:00:00
 }
 
-function update_list_last_run( $mc_list_id, $option_name, $timestamp ) {
+function update_list_option_value( $mc_list_id, $option_name, $value ) {
 
     // Only update if we have an existing entry
     $supported_lists = get_option( 'dt_mailchimp_mc_supported_lists' );
@@ -235,7 +239,7 @@ function update_list_last_run( $mc_list_id, $option_name, $timestamp ) {
 
         $lists = json_decode( $supported_lists );
         if ( isset( $lists->{$mc_list_id} ) ) {
-            $lists->{$mc_list_id}->{$option_name} = $timestamp;
+            $lists->{$mc_list_id}->{$option_name} = $value;
 
             // Save updated list last run
             update_option( 'dt_mailchimp_mc_supported_lists', json_encode( $lists ) );
