@@ -111,15 +111,14 @@ function sync_dt_to_mc() {
 
                                         // Update last run timestamps, assuming we have valid updates
                                         if ( ! empty( $updated ) ) {
-                                            update_global_last_run( 'dt_mailchimp_sync_last_run_ts_dt_to_mc', time() );
                                             update_list_option_value( $subscribed_mc_list_id, 'dt_to_mc_last_sync_run', time() );
                                             update_list_option_value( $subscribed_mc_list_id, 'log', '' );
                                             sync_debug( 'dt_mailchimp_dt_debug', '' );
                                         }
                                     }
                                 } else {
-                                    sync_debug( 'dt_mailchimp_dt_debug', 'Unable to locate/create a valid mc list ' . $subscribed_mc_list_id . ' record, based on dt record [id:' . $dt_post_record['ID'] . ' ].' );
-                                    update_list_option_value( $subscribed_mc_list_id, 'log', 'Unable to locate/create a valid mc record, based on dt record [id:' . $dt_post_record['ID'] . ' ].' );
+                                    sync_debug( 'dt_mailchimp_dt_debug', 'Unable to locate/create a valid mc list ' . $subscribed_mc_list_id . ' record, based on ' . $dt_post_type_id . ' dt record [id:' . $dt_post_record['ID'] . '].' );
+                                    update_list_option_value( $subscribed_mc_list_id, 'log', 'Unable to locate/create a valid mc record, based on ' . $dt_post_type_id . ' dt record [id:' . $dt_post_record['ID'] . '].' );
                                 }
                             }
                         }
@@ -127,6 +126,8 @@ function sync_dt_to_mc() {
                 }
             }
         }
+        // Update global sync run timestamp
+        update_global_last_run( 'dt_mailchimp_sync_last_run_ts_dt_to_mc', time() );
     }
 }
 
@@ -161,7 +162,9 @@ function sync_mc_to_dt() {
                     $dt_post_type_id     = $supported_mappings->{$mc_record->list_id}->dt_post_type;
 
                     // First, attempt to fetch corresponding dt record, using the info to hand!
-                    $dt_record = fetch_dt_record( $mc_record, $dt_post_type_id );
+                    $fetch_results  = fetch_dt_record( $mc_record, $dt_post_type_id );
+                    $dt_record      = $fetch_results['record'];
+                    $already_linked = $fetch_results['linked'];
 
                     // If still no hit, then a new dt record will be created
                     $is_new_dt_record = false;
@@ -174,10 +177,10 @@ function sync_mc_to_dt() {
                     $dt_record = handle_dt_record_subscription( $dt_record, $mc_record );
 
                     // Only proceed if we have a handle on corresponding dt record
-                    if ( ! empty( $dt_record ) && is_dt_record_sync_enabled( $dt_record ) && in_array( $mc_record->list_id, $dt_record['dt_mailchimp_subscribed_mc_lists'] ) ) {
+                    if ( ! empty( $dt_record ) && ( ! $already_linked || ( is_dt_record_sync_enabled( $dt_record ) && in_array( $mc_record->list_id, $dt_record['dt_mailchimp_subscribed_mc_lists'] ) ) ) ) {
 
                         // Ensure mc record has latest changes, in order to update dt
-                        if ( $is_new_dt_record || ! dt_record_has_latest_changes( $dt_record, $mc_record ) ) {
+                        if ( $is_new_dt_record || ! $already_linked || ! dt_record_has_latest_changes( $dt_record, $mc_record ) ) {
 
                             // Extract array of mapped fields; which are to be kept in sync
                             $field_mappings = $supported_mappings->{$mc_record->list_id}->mappings;
@@ -187,19 +190,20 @@ function sync_mc_to_dt() {
 
                             // Update last run timestamps, assuming we have valid updates
                             if ( ! empty( $updated ) ) {
-                                update_global_last_run( 'dt_mailchimp_sync_last_run_ts_mc_to_dt', time() );
                                 update_list_option_value( $mc_record->list_id, 'mc_to_dt_last_sync_run', time() );
                                 update_list_option_value( $mc_record->list_id, 'log', '' );
                                 sync_debug( 'dt_mailchimp_mc_debug', '' );
                             }
                         }
                     } elseif ( empty( $dt_record ) ) {
-                        sync_debug( 'dt_mailchimp_mc_debug', 'Unable to locate/create a valid dt record for mc list ' . $mc_record->list_id . ' record [id:' . $mc_record->id . ']' );
-                        update_list_option_value( $mc_record->list_id, 'log', 'Unable to locate/create a valid dt record for mc record [id:' . $mc_record->id . ']' );
+                        sync_debug( 'dt_mailchimp_mc_debug', 'Unable to locate/create a valid ' . $dt_post_type_id . ' dt record for mc list ' . $mc_record->list_id . ' record [id:' . $mc_record->id . ']' );
+                        update_list_option_value( $mc_record->list_id, 'log', 'Unable to locate/create a valid ' . $dt_post_type_id . ' dt record for mc record [id:' . $mc_record->id . ']' );
                     }
                 }
             }
         }
+        // Update global sync run timestamp
+        update_global_last_run( 'dt_mailchimp_sync_last_run_ts_mc_to_dt', time() );
     }
 }
 
@@ -336,9 +340,10 @@ function fetch_mc_record_by_hidden_fields( $dt_post_record, $mc_list_id ) {
     return Disciple_Tools_Mailchimp_API::find_list_member_by_hidden_id_fields( $mc_list_id, $dt_post_record['ID'] );
 }
 
-function fetch_dt_record( $mc_record, $dt_post_type_id ) {
+function fetch_dt_record( $mc_record, $dt_post_type_id ): array {
 
-    $dt_record = null;
+    $dt_record      = null;
+    $already_linked = false;
 
     // 1st - If present, search for dt record using mc record's hidden post id
     $hidden_id_field_tag = Disciple_Tools_Mailchimp_API::get_default_list_hidden_id_field();
@@ -347,7 +352,8 @@ function fetch_dt_record( $mc_record, $dt_post_type_id ) {
         $hit        = DT_Posts::get_post( $dt_post_type_id, $dt_post_id, false, false );
 
         if ( ! empty( $hit ) && ! is_wp_error( $hit ) ) {
-            $dt_record = $hit;
+            $dt_record      = $hit;
+            $already_linked = true;
         }
     }
 
@@ -374,7 +380,10 @@ function fetch_dt_record( $mc_record, $dt_post_type_id ) {
         }
     }
 
-    return $dt_record;
+    return [
+        'record' => $dt_record,
+        'linked' => $already_linked
+    ];
 }
 
 function fetch_dt_record_by_email( $dt_post_type_id, $email ) {

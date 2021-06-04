@@ -243,12 +243,6 @@ class Disciple_Tools_Mailchimp_Tab_General {
         return ! empty( $supported_lists ) ? $supported_lists : '{}';
     }
 
-    private function fetch_last_sync_run( $option_name ): string {
-        $last_run = get_option( $option_name );
-
-        return ! empty( $last_run ) ? gmdate( 'Y-m-d\TH:i', $last_run ) : '1970-01-01T01:00';
-    }
-
     public function main_column() {
         ?>
         <!-- Box -->
@@ -448,8 +442,8 @@ class Disciple_Tools_Mailchimp_Tab_General {
                 <th style="vertical-align: middle; text-align: center;">Name</th>
                 <th style="vertical-align: middle; text-align: center;">Mappings</th>
                 <th style="vertical-align: middle; text-align: center;">Sync Status</th>
-                <th style="vertical-align: middle; text-align: center;">MC to DT Last Run</th>
-                <th style="vertical-align: middle; text-align: center;">DT to MC Last Run</th>
+                <th style="vertical-align: middle; text-align: center;">MC to DT Last Update</th>
+                <th style="vertical-align: middle; text-align: center;">DT to MC Last Update</th>
                 <th></th>
             </tr>
             </thead>
@@ -466,10 +460,10 @@ class Disciple_Tools_Mailchimp_Tab_General {
 
                     echo '<td style="vertical-align: middle; text-align: center;">' . esc_attr( $this::main_column_supported_mc_lists_logging( $list->id ) ) . '</td>';
 
-                    $mc_to_dt_last_run = ! empty( $list->mc_to_dt_last_sync_run ) ? gmdate( 'Y-m-d h:i:s', $list->mc_to_dt_last_sync_run ) : '';
+                    $mc_to_dt_last_run = ! empty( $list->mc_to_dt_last_sync_run ) ? dt_format_date( $list->mc_to_dt_last_sync_run, 'long' ) : '';
                     echo '<td style="vertical-align: middle; text-align: center;">' . esc_attr( $mc_to_dt_last_run ) . '</td>';
 
-                    $dt_to_mc_last_run = ! empty( $list->dt_to_mc_last_sync_run ) ? gmdate( 'Y-m-d h:i:s', $list->dt_to_mc_last_sync_run ) : '';
+                    $dt_to_mc_last_run = ! empty( $list->dt_to_mc_last_sync_run ) ? dt_format_date( $list->dt_to_mc_last_sync_run, 'long' ) : '';
                     echo '<td style="vertical-align: middle; text-align: center;">' . esc_attr( $dt_to_mc_last_run ) . '</td>';
 
                     echo '<td style="vertical-align: middle;">';
@@ -514,21 +508,23 @@ class Disciple_Tools_Mailchimp_Tab_General {
                 return $supported_lists->{$mc_list_id}->log;
             }
 
-            // Last Synced at Y-m-d h:i:s
-            if ( ! empty( $supported_lists->{$mc_list_id}->mc_to_dt_last_sync_run ) && ! empty( $supported_lists->{$mc_list_id}->dt_to_mc_last_sync_run ) ) {
-                if ( $supported_lists->{$mc_list_id}->mc_to_dt_last_sync_run >= $supported_lists->{$mc_list_id}->dt_to_mc_last_sync_run ) {
-                    return 'Last Synced at ' . gmdate( 'Y-m-d h:i:s', $supported_lists->{$mc_list_id}->mc_to_dt_last_sync_run );
+            // Last Synced at X
+            $global_ts_dt_to_mc = get_option( 'dt_mailchimp_sync_last_run_ts_dt_to_mc' );
+            $global_ts_mc_to_dt = get_option( 'dt_mailchimp_sync_last_run_ts_mc_to_dt' );
+            if ( ! empty( $global_ts_mc_to_dt ) && ! empty( $global_ts_dt_to_mc ) ) {
+                if ( $global_ts_mc_to_dt >= $global_ts_dt_to_mc ) {
+                    return 'Last Synced at ' . dt_format_date( $global_ts_mc_to_dt, 'long' );
                 } else {
-                    return 'Last Synced at ' . gmdate( 'Y-m-d h:i:s', $supported_lists->{$mc_list_id}->dt_to_mc_last_sync_run );
+                    return 'Last Synced at ' . dt_format_date( $global_ts_dt_to_mc, 'long' );
                 }
             }
 
-            if ( ! empty( $supported_lists->{$mc_list_id}->mc_to_dt_last_sync_run ) ) {
-                return 'Last Synced at ' . gmdate( 'Y-m-d h:i:s', $supported_lists->{$mc_list_id}->mc_to_dt_last_sync_run );
+            if ( ! empty( $global_ts_mc_to_dt ) ) {
+                return 'Last Synced at ' . dt_format_date( $global_ts_mc_to_dt, 'long' );
             }
 
-            if ( ! empty( $supported_lists->{$mc_list_id}->dt_to_mc_last_sync_run ) ) {
-                return 'Last Synced at ' . gmdate( 'Y-m-d h:i:s', $supported_lists->{$mc_list_id}->dt_to_mc_last_sync_run );
+            if ( ! empty( $global_ts_dt_to_mc ) ) {
+                return 'Last Synced at ' . dt_format_date( $global_ts_dt_to_mc, 'long' );
             }
         }
 
