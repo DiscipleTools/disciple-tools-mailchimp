@@ -5,7 +5,7 @@
  * Description: Disciple Tools - Mailchimp plugin is intended to integrate Mailchimp with the Disciple Tools system.
  * Text Domain: disciple-tools-mailchimp
  * Domain Path: /languages
- * Version:  0.1
+ * Version:  1.0
  * Author URI: https://github.com/DiscipleTools
  * GitHub Plugin URI: https://github.com/DiscipleTools/disciple-tools-mailchimp
  * Requires at least: 4.7.0
@@ -308,21 +308,21 @@ if ( ! function_exists( "dt_hook_ajax_notice_handler" ) ) {
  * Also, see the instructions for version updating to understand the steps involved.
  * @see https://github.com/DiscipleTools/disciple-tools-version-control/wiki/How-to-Update-the-Starter-Plugin
  */
-//add_action( 'plugins_loaded', function (){
-//    if ( is_admin() ){
-//        // Check for plugin updates
-//        if ( ! class_exists( 'Puc_v4_Factory' ) ) {
-//            if ( file_exists( get_template_directory() . '/dt-core/libraries/plugin-update-checker/plugin-update-checker.php' )){
-//                require( get_template_directory() . '/dt-core/libraries/plugin-update-checker/plugin-update-checker.php' );
-//            }
-//        }
-//        if ( class_exists( 'Puc_v4_Factory' ) ){
-//            Puc_v4_Factory::buildUpdateChecker(
-//                'https://raw.githubusercontent.com/DiscipleTools/disciple-tools-mailchimp/master/version-control.json',
-//                __FILE__,
-//                'disciple-tools-mailchimp'
-//            );
-//
-//        }
-//    }
-//} );
+add_action( 'plugins_loaded', function (){
+   if ( is_admin() ){
+       // Check for plugin updates
+       if ( ! class_exists( 'Puc_v4_Factory' ) ) {
+           if ( file_exists( get_template_directory() . '/dt-core/libraries/plugin-update-checker/plugin-update-checker.php' )){
+               require( get_template_directory() . '/dt-core/libraries/plugin-update-checker/plugin-update-checker.php' );
+           }
+       }
+       if ( class_exists( 'Puc_v4_Factory' ) ){
+           Puc_v4_Factory::buildUpdateChecker(
+               'https://raw.githubusercontent.com/DiscipleTools/disciple-tools-mailchimp/master/version-control.json',
+               __FILE__,
+               'disciple-tools-mailchimp'
+           );
+
+       }
+   }
+} );
