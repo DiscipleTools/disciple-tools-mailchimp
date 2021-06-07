@@ -1,2 +1,8 @@
 vendor/*
+!vendor/autoload.php
+!vendor/composer
+!vendor/guzzlehttp
+!vendor/mailchimp
+!vendor/psr
+!vendor/ralouphie
 composer.lock

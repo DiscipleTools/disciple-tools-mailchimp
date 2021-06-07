@@ -15,10 +15,10 @@ If you are working on a plugin based off our starter plugin run `./includes/admi
 
 You might need to run `composer install` first.
 
-Note: rules for PHPCS are located in the `phpcs.xml` file. We sometimes update the rule list as PHPCS updates. We’ll update the [starter plugin](https://github.com/DiscipleTools/disciple-tools-plugin-starter-template) `phpcs.xml`, you might want to look there to get the latest version.
+Note: rules for PHPCS are located in the `phpcs.xml` file. We sometimes update the rule list as PHPCS updates. We’ll update the [starter plugin](https://github.com/DiscipleTools/disciple-tools-mailchimp) `phpcs.xml`, you might want to look there to get the latest version.
 
 ### GitHub and Commits
-For new plugins copy our [starter plugin](https://github.com/DiscipleTools/disciple-tools-plugin-starter-template).
+For new plugins copy our [starter plugin](https://github.com/DiscipleTools/disciple-tools-mailchimp).
 
 To commit to the theme or an existing plugin start by creating a fork of the repository. When you are ready, create a pull request into our repo.
 
