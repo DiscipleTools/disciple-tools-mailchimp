@@ -303,8 +303,8 @@ All URIs are relative to *https://server.api.mailchimp.com/3.0*
 | **lists.updateListSignupForm** | /lists/{list_id}/signup-forms |
 | **lists.createListWebhook** | /lists/{list_id}/webhooks |
 | **lists.listSegments** | /lists/{list_id}/segments |
-| **lists.previewSegment** | /lists/{list_id}/preview-segment |
 | **lists.setListMember** | /lists/{list_id}/members/{subscriber_hash} |
+| **lists.tagSearch** | /lists/{list_id}/tag-search |
 | **ping.get** | /ping |
 | **reporting.getFacebookAdsReportAll** | /reporting/facebook-ads |
 | **reporting.getFacebookAdReport** | /reporting/facebook-ads/{outreach_id} |

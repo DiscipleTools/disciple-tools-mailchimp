@@ -6,7 +6,7 @@
     'aliases' => 
     array (
     ),
-    'reference' => 'd204a3b2325e97414ffcb339f4d14500cc3a3a75',
+    'reference' => 'c5bf3246259e1b18e6dc96b8f4a7e72e06450e71',
     'name' => '__root__',
   ),
   'versions' => 
@@ -18,7 +18,7 @@
       'aliases' => 
       array (
       ),
-      'reference' => 'd204a3b2325e97414ffcb339f4d14500cc3a3a75',
+      'reference' => 'c5bf3246259e1b18e6dc96b8f4a7e72e06450e71',
     ),
     'dealerdirect/phpcodesniffer-composer-installer' => 
     array (
@@ -58,12 +58,12 @@
     ),
     'mailchimp/marketing' => 
     array (
-      'pretty_version' => '3.0.41',
-      'version' => '3.0.41.0',
+      'pretty_version' => '3.0.44',
+      'version' => '3.0.44.0',
       'aliases' => 
       array (
       ),
-      'reference' => '10b99b27fa15726ee64aab7891e175b916297964',
+      'reference' => 'b88d13486cea2f6166bff54511b15d10e9c56b7f',
     ),
     'psr/http-client' => 
     array (
