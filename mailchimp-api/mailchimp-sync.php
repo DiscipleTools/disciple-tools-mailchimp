@@ -59,6 +59,9 @@ function sync_dt_to_mc() {
         // Fetch supported mc lists
         $supported_mc_lists = fetch_supported_array( 'dt_mailchimp_mc_supported_lists' );
 
+        // Fetch mailchimp list interest category groups
+        $mc_list_interest_categories = fetch_mc_list_interest_categories( $supported_mc_lists );
+
         // Fetch field mappings
         $supported_mappings = fetch_supported_mappings();
 
@@ -107,7 +110,7 @@ function sync_dt_to_mc() {
                                     // ensure dt has the most recent modifications of the two records, in order to update
                                     if ( $is_new_mc_record || dt_record_has_latest_changes( $dt_post_record, $mc_record ) ) {
 
-                                        $updated = update_mc_record( $subscribed_mc_list_id, $dt_post_record, $mc_record, $field_mappings );
+                                        $updated = update_mc_record( $subscribed_mc_list_id, $dt_post_record, $mc_record, $field_mappings, $mc_list_interest_categories );
 
                                         // Update last run timestamps, assuming we have valid updates
                                         if ( ! empty( $updated ) ) {
@@ -142,6 +145,9 @@ function sync_mc_to_dt() {
 
         // Fetch supported mc lists
         $supported_mc_lists = fetch_supported_array( 'dt_mailchimp_mc_supported_lists' );
+
+        // Fetch mailchimp list interest category groups
+        $mc_list_interest_categories = fetch_mc_list_interest_categories( $supported_mc_lists );
 
         // Fetch field mappings
         $supported_mappings = fetch_supported_mappings();
@@ -186,7 +192,7 @@ function sync_mc_to_dt() {
                             $field_mappings = $supported_mappings->{$mc_record->list_id}->mappings;
 
                             // Update dt record
-                            $updated = update_dt_record( $dt_record, $mc_record, $field_mappings );
+                            $updated = update_dt_record( $dt_record, $mc_record, $field_mappings, $mc_list_interest_categories );
 
                             // Update last run timestamps, assuming we have valid updates
                             if ( ! empty( $updated ) ) {
@@ -267,6 +273,18 @@ function fetch_supported_array( $option_name, $ids_only = true ): array {
     } else {
         return $array;
     }
+}
+
+function fetch_mc_list_interest_categories( $supported_mc_lists ): array {
+    $mc_list_categories = [];
+    foreach ( $supported_mc_lists as $mc_list_id ) {
+        $interest_categories = Disciple_Tools_Mailchimp_API::get_list_interest_categories( $mc_list_id, true );
+        if ( ! empty( $interest_categories ) ) {
+            $mc_list_categories[ $mc_list_id ] = $interest_categories;
+        }
+    }
+
+    return $mc_list_categories;
 }
 
 function fetch_latest_dt_records( $post_type, $timestamp ): array {
@@ -557,38 +575,116 @@ function mapping_option_field_sync_direction_callback( $dt_record, $mc_record, $
     return $value;
 }
 
-function update_mc_record( $mc_list_id, $dt_record, $mc_record, $mappings ) {
+function fetch_mc_list_category_interests( $mc_list_id, $cat_id, $mc_list_interest_categories ): array {
+    $interests = [];
+    if ( isset( $mc_list_interest_categories[ $mc_list_id ] ) ) {
+        foreach ( $mc_list_interest_categories[ $mc_list_id ] as $category ) {
+            if ( $category->cat_id === $cat_id && isset( $category->cat_interests ) && ! empty( $category->cat_interests ) ) {
+                foreach ( $category->cat_interests as $interest ) {
+                    $interests[] = (object) [
+                        "int_id"       => $interest->int_id,
+                        "int_name"     => $interest->int_name,
+                        "int_selected" => false // Default state!
+                    ];
+                }
+            }
+        }
+    }
+
+    return $interests;
+}
+
+function update_mc_record( $mc_list_id, $dt_record, $mc_record, $mappings, $mc_list_interest_categories ) {
+
+    $updated_merge_fields       = [];
+    $updated_interests          = [];
+    $prefix_interest_categories = Disciple_Tools_Mailchimp_API::get_list_interest_categories_field_prefix();
+    $dt_fields                  = DT_Posts::get_post_settings( $dt_record['post_type'] )['fields'];
 
     // Loop over all mapped fields; updating accordingly based on specified options
-    $updated_fields = [];
     foreach ( $mappings as $mapping ) {
 
         // Distinguish between different field shapes; e.g. arrays, strings...
-        // If array, default value will be taken from the first element
+        // Historically, ff array, default value will be taken from the first element.
+        // However, since the introduction of mc list interest category support; multi_select fields are expected!
         $dt_field = $dt_record[ $mapping->dt_field_id ];
         if ( ! empty( $dt_field ) ) {
-            $dt_field_value = is_array( $dt_field ) ? $dt_field[0]['value'] : $dt_field;
 
-            // Apply mapping transformation options prior to setting updated dt value
-            $applied_mapping_options = apply_mapping_options( $dt_record, $mc_record, $dt_field_value, true, $mapping->options );
+            // INTEREST CATEGORY GROUP UPDATES
+            if ( substr( $mapping->mc_field_id, 0, strlen( $prefix_interest_categories ) ) === $prefix_interest_categories ) {
 
-            // Add updated value, assuming we have the green light to do so, following filtering of mapping options
-            if ( $applied_mapping_options->continue ) {
+                // Is the corresponding dt field of type multi_select?
+                if ( isset( $dt_fields[ $mapping->dt_field_id ] ) && strtolower( $dt_fields[ $mapping->dt_field_id ]['type'] ) === 'multi_select' ) {
 
-                // Safeguard against potential infinite update loops
-                if ( ! matching_mc_field_value( $mc_record, $mapping->mc_field_id, $applied_mapping_options->value ) ) {
-                    $updated_fields[ $mapping->mc_field_id ] = $applied_mapping_options->value;
+                    // Fetch all associated category interests; which are set to a false selected state by default!
+                    $category_id = substr( $mapping->mc_field_id, strlen( $prefix_interest_categories ) );
+                    $interests   = fetch_mc_list_category_interests( $mc_list_id, $category_id, $mc_list_interest_categories );
+
+                    // Assuming we have interests, build list of selected labels.
+                    if ( ! empty( $interests ) ) {
+
+                        // First, obtain list of selected labels.
+                        $selected_labels = [];
+                        if ( is_array( $dt_field ) ) {
+                            foreach ( $dt_field as $label_key ) {
+                                if ( isset( $dt_fields[ $mapping->dt_field_id ]['default'][ $label_key ] ) ) {
+                                    $selected_labels[] = $dt_fields[ $mapping->dt_field_id ]['default'][ $label_key ]['label'];
+                                }
+                            }
+                        }
+
+                        // Enable/Select corresponding interests based on selected labels.
+                        foreach ( $interests as &$interest ) {
+                            $interest->int_selected = in_array( $interest->int_name, $selected_labels );
+                        }
+
+                        // Highly unlikely for this mapping type, but still provide provision for any transformation options.
+                        $applied_mapping_options = apply_mapping_options( $dt_record, $mc_record, $interests, true, $mapping->options );
+
+                        // Assuming we still have a 'go'; then re-package interests ahead of final update.
+                        if ( $applied_mapping_options->continue && is_array( $applied_mapping_options->value ) ) {
+
+                            // Safeguard against potential infinite update loops
+                            if ( ! matching_mc_field_category_interests( $mc_record, $applied_mapping_options->value ) ) {
+                                foreach ( $applied_mapping_options->value as $value ) { // Should be an untouched category interest
+                                    $updated_interests[ $value->int_id ] = $value->int_selected;
+                                }
+                            }
+                        }
+                    }
+                }
+            } else {
+
+                // MERGE FIELD UPDATES
+                $dt_field_value = is_array( $dt_field ) ? $dt_field[0]['value'] : $dt_field;
+
+                // Apply mapping transformation options prior to setting updated dt value
+                $applied_mapping_options = apply_mapping_options( $dt_record, $mc_record, $dt_field_value, true, $mapping->options );
+
+                // Add updated value, assuming we have the green light to do so, following filtering of mapping options
+                if ( $applied_mapping_options->continue ) {
+
+                    // Safeguard against potential infinite update loops
+                    if ( ! matching_mc_field_value( $mc_record, $mapping->mc_field_id, $applied_mapping_options->value ) ) {
+                        $updated_merge_fields[ $mapping->mc_field_id ] = $applied_mapping_options->value;
+                    }
                 }
             }
         }
     }
 
     // Only proceed if we have something to say! ;)
-    if ( count( $updated_fields ) > 0 ) {
+    if ( ! empty( $updated_merge_fields ) || ! empty( $updated_interests ) ) {
 
         // Package updated values, ahead of final push
-        $updated_mc_record                 = [];
-        $updated_mc_record['merge_fields'] = $updated_fields;
+        $updated_mc_record = [];
+
+        if ( ! empty( $updated_merge_fields ) ) {
+            $updated_mc_record['merge_fields'] = $updated_merge_fields;
+        }
+        if ( ! empty( $updated_interests ) ) {
+            $updated_mc_record['interests'] = $updated_interests;
+        }
 
         // Finally, post update request
         return Disciple_Tools_Mailchimp_API::update_list_member( $mc_list_id, $mc_record->id, $updated_mc_record );
@@ -598,7 +694,9 @@ function update_mc_record( $mc_list_id, $dt_record, $mc_record, $mappings ) {
     }
 }
 
-function update_dt_record( $dt_record, $mc_record, $mappings ) {
+function update_dt_record( $dt_record, $mc_record, $mappings, $mc_list_interest_categories ) {
+
+    $prefix_interest_categories = Disciple_Tools_Mailchimp_API::get_list_interest_categories_field_prefix();
 
     // First, fetch dt post type field settings; which will be used further down stream
     $dt_fields = DT_Posts::get_post_settings( $dt_record['post_type'] )['fields'];
@@ -613,37 +711,88 @@ function update_dt_record( $dt_record, $mc_record, $mappings ) {
         // Only proceed if a valid dt field name has been identified
         if ( ! empty( $dt_field_name ) ) {
 
-            // Extract values and apply any detected mapping option functions
-            // Ensure to accommodate emails; which are not specified un 'merge_fields'
-            $mc_field_value = ( $mapping->mc_field_id === 'EMAIL' ) ? $mc_record->email_address : $mc_record->merge_fields->{$mapping->mc_field_id};
+            // INTEREST CATEGORY GROUP UPDATES
+            if ( substr( $mapping->mc_field_id, 0, strlen( $prefix_interest_categories ) ) === $prefix_interest_categories ) {
 
-            if ( ! empty( $mc_field_value ) ) {
+                // Is the corresponding dt field of type multi_select?
+                if ( isset( $dt_fields[ $dt_field_name ] ) && strtolower( $dt_fields[ $dt_field_name ]['type'] ) === 'multi_select' ) {
 
-                // Apply mapping transformation options prior to setting updated mc value
-                $applied_mapping_options = apply_mapping_options( $dt_record, $mc_record, $mc_field_value, false, $mapping->options );
+                    // Does the current mc record have any interests worth exploring?!
+                    if ( isset( $mc_record->interests ) && ! empty( $mc_record->interests ) ) {
 
-                // Add updated value, assuming we have the green light to do so, following filtering of mapping options
-                if ( $applied_mapping_options->continue ) {
+                        // Fetch all associated category interests; which are set to a false selected state by default!
+                        $category_id        = substr( $mapping->mc_field_id, strlen( $prefix_interest_categories ) );
+                        $category_interests = fetch_mc_list_category_interests( $mc_record->list_id, $category_id, $mc_list_interest_categories );
 
-                    // Safeguard against potential infinite update loops
-                    if ( ! matching_dt_field_value( $dt_record, $dt_field_name, $applied_mapping_options->value ) ) {
+                        // Assuming we have valid category interests, loop through and enable relevant interests.
+                        if ( ! empty( $category_interests ) ) {
+                            foreach ( $category_interests as &$interest ) {
+                                $interest->int_selected = isset( $mc_record->interests->{$interest->int_id} ) && ! empty( $mc_record->interests->{$interest->int_id} ) ? $mc_record->interests->{$interest->int_id} : false;
+                            }
 
-                        // Update accordingly based on field type and it's presence!
-                        $is_text_field = isset( $dt_fields[ $dt_field_name ] ) && strtolower( $dt_fields[ $dt_field_name ]['type'] ) === 'text';
+                            // Highly unlikely for this mapping type, but still provide provision for any transformation options.
+                            $applied_mapping_options = apply_mapping_options( $dt_record, $mc_record, $category_interests, false, $mapping->options );
 
-                        if ( $is_text_field ) {
-                            $updated_fields[ $dt_field_name ] = $applied_mapping_options->value;
+                            // Assuming we still have a 'go'; then re-package interests ahead of final update.
+                            if ( $applied_mapping_options->continue && is_array( $applied_mapping_options->value ) ) {
 
-                        } elseif ( isset( $dt_record[ $dt_field_name ] ) && is_array( $dt_record[ $dt_field_name ] ) ) {
-                            $updated_fields[ $dt_field_name ][0] = [
-                                'value' => $applied_mapping_options->value,
-                                'key'   => $dt_record[ $dt_field_name ][0]['key']
-                            ];
+                                // Safeguard against potential infinite update loops
+                                if ( ! matching_dt_field_category_interests( $dt_record, $dt_field_name, $dt_fields[ $dt_field_name ]['default'], $applied_mapping_options->value ) ) {
+                                    foreach ( $applied_mapping_options->value as $value ) { // Should be an untouched category interest
 
-                        } elseif ( ! isset( $dt_record[ $dt_field_name ] ) ) {
-                            $updated_fields[ $dt_field_name ]['values'][0] = [
-                                'value' => $applied_mapping_options->value
-                            ];
+                                        // As we link on labels, need to parse defaults for a match.
+                                        foreach ( $dt_fields[ $dt_field_name ]['default'] as $key => $field ) {
+
+                                            // On match, add update based on interest selected state.
+                                            if ( $value->int_name === $field['label'] ) {
+                                                $updated_fields[ $dt_field_name ]['values'][] = [
+                                                    'value'  => $key,
+                                                    'delete' => ! $value->int_selected
+                                                ];
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            } else {
+
+                // MERGE FIELD UPDATES
+
+                // Extract values and apply any detected mapping option functions
+                // Ensure to accommodate emails; which are not specified un 'merge_fields'
+                $mc_field_value = ( $mapping->mc_field_id === 'EMAIL' ) ? $mc_record->email_address : $mc_record->merge_fields->{$mapping->mc_field_id};
+
+                if ( ! empty( $mc_field_value ) ) {
+
+                    // Apply mapping transformation options prior to setting updated mc value
+                    $applied_mapping_options = apply_mapping_options( $dt_record, $mc_record, $mc_field_value, false, $mapping->options );
+
+                    // Add updated value, assuming we have the green light to do so, following filtering of mapping options
+                    if ( $applied_mapping_options->continue ) {
+
+                        // Safeguard against potential infinite update loops
+                        if ( ! matching_dt_field_value( $dt_record, $dt_field_name, $applied_mapping_options->value ) ) {
+
+                            // Update accordingly based on field type and it's presence!
+                            $is_text_field = isset( $dt_fields[ $dt_field_name ] ) && strtolower( $dt_fields[ $dt_field_name ]['type'] ) === 'text';
+
+                            if ( $is_text_field ) {
+                                $updated_fields[ $dt_field_name ] = $applied_mapping_options->value;
+
+                            } elseif ( isset( $dt_record[ $dt_field_name ] ) && is_array( $dt_record[ $dt_field_name ] ) ) {
+                                $updated_fields[ $dt_field_name ][0] = [
+                                    'value' => $applied_mapping_options->value,
+                                    'key'   => $dt_record[ $dt_field_name ][0]['key']
+                                ];
+
+                            } elseif ( ! isset( $dt_record[ $dt_field_name ] ) ) {
+                                $updated_fields[ $dt_field_name ]['values'][0] = [
+                                    'value' => $applied_mapping_options->value
+                                ];
+                            }
                         }
                     }
                 }
@@ -677,6 +826,35 @@ function matching_dt_field_value( $dt_record, $dt_field_id, $value ): bool {
     }
 
     return false;
+}
+
+function matching_mc_field_category_interests( $mc_record, $interests ): bool {
+    $matching = true;
+    foreach ( $interests as $interest ) {
+        if ( ! isset( $mc_record->interests->{$interest->int_id} ) ) {
+            $matching = false;
+        }
+        if ( $interest->int_selected !== $mc_record->interests->{$interest->int_id} ) {
+            $matching = false;
+        }
+    }
+
+    return $matching;
+}
+
+function matching_dt_field_category_interests( $dt_record, $dt_field_id, $dt_field_defaults, $interests ): bool {
+    $matching = true;
+    foreach ( $interests as $interest ) {
+        foreach ( $dt_field_defaults as $key => $default ) {
+            if ( $interest->int_name === $default['label'] ) {
+                if ( $interest->int_selected !== in_array( $key, $dt_record[ $dt_field_id ] ) ) {
+                    $matching = false;
+                }
+            }
+        }
+    }
+
+    return $matching;
 }
 
 function handle_dt_record_subscription( $dt_record, $mc_record ) {

@@ -154,9 +154,17 @@ class Disciple_Tools_Mailchimp_Tab_General {
     private function process_updates() {
         // Connectivity Updates
         if ( isset( $_POST['mc_main_col_connect_nonce'] ) && wp_verify_nonce( sanitize_key( wp_unslash( $_POST['mc_main_col_connect_nonce'] ) ), 'mc_main_col_connect_nonce' ) ) {
-            update_option( 'dt_mailchimp_mc_api_key', isset( $_POST['mc_main_col_connect_mc_api_key'] ) ? sanitize_text_field( wp_unslash( $_POST['mc_main_col_connect_mc_api_key'] ) ) : '' );
             update_option( 'dt_mailchimp_mc_accept_sync', isset( $_POST['mc_main_col_connect_mc_accept_sync_feed'] ) ? 1 : 0 );
             update_option( 'dt_mailchimp_dt_push_sync', isset( $_POST['mc_main_col_connect_dt_push_sync_feed'] ) ? 1 : 0 );
+
+            // Ensure changing of api keys force a sync reset!
+            if ( isset( $_POST['mc_main_col_connect_mc_api_key'] ) ) {
+                if ( get_option( 'dt_mailchimp_mc_api_key' ) !== sanitize_text_field( wp_unslash( $_POST['mc_main_col_connect_mc_api_key'] ) ) ) {
+                    delete_option( 'dt_mailchimp_sync_last_run_ts_dt_to_mc' );
+                    delete_option( 'dt_mailchimp_sync_last_run_ts_mc_to_dt' );
+                }
+            }
+            update_option( 'dt_mailchimp_mc_api_key', isset( $_POST['mc_main_col_connect_mc_api_key'] ) ? sanitize_text_field( wp_unslash( $_POST['mc_main_col_connect_mc_api_key'] ) ) : '' );
         }
 
         // Available Mailchimp List Additions
@@ -949,6 +957,9 @@ class Disciple_Tools_Mailchimp_Tab_Mappings {
         </select>
         <br><br>
 
+        Ensure Mailchimp interest category group fields are only mapped with DT multi_select types. No other type pairings will be sync'd at this time.
+        <br><br>
+
         <span style="float:right;">
             <a id="mc_mappings_main_col_selected_mc_list_add_mapping_but"
                class="button float-right"><?php esc_html_e( "Add Mapping", 'disciple_tools' ) ?></a>
@@ -958,6 +969,8 @@ class Disciple_Tools_Mailchimp_Tab_Mappings {
         <!-- Hidden Metadata -->
         <input type="hidden" id="mc_mappings_main_col_selected_mc_list_fields_hidden"
                value="<?php echo esc_attr( json_encode( $this->main_column_display_selected_list_field_mappings_parsed_mc_fields( $mc_list_id ) ) ); ?>"/>
+        <input type="hidden" id="mc_mappings_main_col_selected_mc_list_fields_prefix_interest_categories_hidden"
+               value="<?php echo esc_attr( Disciple_Tools_Mailchimp_API::get_list_interest_categories_field_prefix() ); ?>"/>
         <input type="hidden" id="mc_mappings_main_col_selected_mc_list_dt_fields_hidden"
                value="<?php echo esc_attr( json_encode( $this->main_column_display_selected_list_field_mappings_parsed_dt_fields() ) ); ?>"/>
         <!-- Hidden Metadata -->
@@ -999,12 +1012,26 @@ class Disciple_Tools_Mailchimp_Tab_Mappings {
 
     private function main_column_display_selected_list_field_mappings_parsed_mc_fields( $mc_list_id ): array {
         $mc_list_fields_parsed = [];
-        $mc_list_fields        = Disciple_Tools_Mailchimp_API::get_list_fields( $mc_list_id );
+
+        // Merge Fields
+        $mc_list_fields = Disciple_Tools_Mailchimp_API::get_list_fields( $mc_list_id );
         if ( ! empty( $mc_list_fields ) ) {
             foreach ( $mc_list_fields as $field ) {
                 $mc_list_fields_parsed[] = (object) [
                     "merge_id" => $field->tag,
                     "name"     => $field->name
+                ];
+            }
+        }
+
+        // Interest Categories
+        $mc_list_interest_categories = Disciple_Tools_Mailchimp_API::get_list_interest_categories( $mc_list_id );
+        if ( ! empty( $mc_list_interest_categories ) ) {
+            $prefix = Disciple_Tools_Mailchimp_API::get_list_interest_categories_field_prefix();
+            foreach ( $mc_list_interest_categories as $category ) {
+                $mc_list_fields_parsed[] = (object) [
+                    "merge_id" => $prefix . '' . $category->cat_id,
+                    "name"     => $category->cat_title
                 ];
             }
         }
@@ -1080,10 +1107,40 @@ class Disciple_Tools_Mailchimp_Tab_Mappings {
                         <select id="mc_mappings_main_col_selected_mc_list_mappings_table_col_mc_fields_select_ele"
                                 style="max-width: 100px;">
                             <?php
+                            // Since the introduction of mc interest category field support; ensure a distinction is made within dropdown!
                             $mc_fields = $this->main_column_display_selected_list_field_mappings_parsed_mc_fields( $mc_list_id );
+
+                            $mc_merge_fields        = [];
+                            $mc_interest_categories = [];
+
+                            $prefix_interest_categories = Disciple_Tools_Mailchimp_API::get_list_interest_categories_field_prefix();
+
+                            // Filter different mc field types
                             foreach ( $mc_fields as $mc_field ) {
-                                $selected = ( $mapping->mc_field_id === $mc_field->merge_id ) ? 'selected' : '';
-                                echo '<option ' . esc_attr( $selected ) . ' value="' . esc_attr( $mc_field->merge_id ) . '">' . esc_attr( $mc_field->name ) . '</option>';
+                                if ( substr( $mc_field->merge_id, 0, strlen( $prefix_interest_categories ) ) === $prefix_interest_categories ) {
+                                    $mc_interest_categories[] = $mc_field;
+
+                                } else {
+                                    $mc_merge_fields[] = $mc_field;
+                                }
+                            }
+
+                            // Merge Fields
+                            if ( ! empty( $mc_merge_fields ) ) {
+                                echo '<option disabled value>-- Default Fields --</option>';
+                                foreach ( $mc_merge_fields as $merge_field ) {
+                                    $selected = ( $mapping->mc_field_id === $merge_field->merge_id ) ? 'selected' : '';
+                                    echo '<option ' . esc_attr( $selected ) . ' value="' . esc_attr( $merge_field->merge_id ) . '">' . esc_attr( $merge_field->name ) . '</option>';
+                                }
+                            }
+
+                            // Interest Categories
+                            if ( ! empty( $mc_interest_categories ) ) {
+                                echo '<option disabled value>-- Interest Category Groups --</option>';
+                                foreach ( $mc_interest_categories as $int_cat_field ) {
+                                    $selected = ( $mapping->mc_field_id === $int_cat_field->merge_id ) ? 'selected' : '';
+                                    echo '<option ' . esc_attr( $selected ) . ' value="' . esc_attr( $int_cat_field->merge_id ) . '">' . esc_attr( $int_cat_field->name ) . '</option>';
+                                }
                             }
                             ?>
                         </select>
