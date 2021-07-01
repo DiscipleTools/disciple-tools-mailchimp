@@ -45,19 +45,28 @@ function dt_mailchimp_sync_run() {
 
     // DT <- MC Sync
     sync_mc_to_dt();
+
+    // Age Stale Logs
+    dt_mailchimp_logging_aged();
 }
 
 function sync_dt_to_mc() {
     if ( is_sync_enabled( 'dt_mailchimp_dt_push_sync' ) ) {
+
+        // Load logs
+        $logs   = dt_mailchimp_logging_load();
+        $logs[] = dt_mailchimp_logging_create( '[STARTED] - DT -> MC' );
 
         // Determine global last run timestamp
         $last_run = fetch_global_last_run( 'dt_mailchimp_sync_last_run_ts_dt_to_mc' );
 
         // Adjust run start sliding-window, so as to capture any stragglers, since last run
         $last_run_start_window = adjust_last_run_start_window( $last_run, 1 ); // 1Hr prior to last run
+        $logs[]                = dt_mailchimp_logging_create( 'DT record search starting point: ' . dt_format_date( $last_run_start_window, 'long' ) );
 
         // Fetch supported mc lists
         $supported_mc_lists = fetch_supported_array( 'dt_mailchimp_mc_supported_lists' );
+        $logs[]             = dt_mailchimp_logging_create( 'Supported MC list count: ' . count( $supported_mc_lists ) );
 
         // Fetch mailchimp list interest category groups
         $mc_list_interest_categories = fetch_mc_list_interest_categories( $supported_mc_lists );
@@ -71,80 +80,126 @@ function sync_dt_to_mc() {
 
             // Query dt for changed/new records
             $latest_dt_records = fetch_latest_dt_records( $dt_post_type_id, $last_run_start_window );
+            $logs[]            = dt_mailchimp_logging_create( 'Latest DT records count: ' . count( $latest_dt_records ) );
 
             // Loop over latest dt post ids
             foreach ( $latest_dt_records as $dt_post_id ) {
 
-                // Fetch corresponding post record
-                $dt_post_record = DT_Posts::get_post( $dt_post_type_id, $dt_post_id->ID, false, false );
+                try {
 
-                // Ensure dt record is to be kept in sync
-                if ( is_dt_record_sync_enabled( $dt_post_record ) ) {
+                    $logs[] = dt_mailchimp_logging_create( 'Processing DT record: ' . $dt_post_id->ID . ' from post type: ' . $dt_post_type_id );
 
-                    // Iterate over subscribed mc lists and find associated mapping; assuming list is available and supported
-                    foreach ( $dt_post_record['dt_mailchimp_subscribed_mc_lists'] as $subscribed_mc_list_id ) {
+                    // Fetch corresponding post record
+                    $dt_post_record = DT_Posts::get_post( $dt_post_type_id, $dt_post_id->ID, false, false );
 
-                        // Ensure mc list is supported and has mapping
-                        if ( in_array( $subscribed_mc_list_id, $supported_mc_lists ) && isset( $supported_mappings->$subscribed_mc_list_id ) ) {
+                    // Ensure dt record is to be kept in sync
+                    if ( is_dt_record_sync_enabled( $dt_post_record ) ) {
 
-                            // Ensure mappings post type corresponds with current post type id; so as to avoid cross post type syncs
-                            if ( $dt_post_type_id === $supported_mappings->$subscribed_mc_list_id->dt_post_type ) {
+                        // Iterate over subscribed mc lists and find associated mapping; assuming list is available and supported
+                        foreach ( $dt_post_record['dt_mailchimp_subscribed_mc_lists'] as $subscribed_mc_list_id ) {
 
-                                // Extract array of mapped fields; which are to be kept in sync
-                                $field_mappings = $supported_mappings->$subscribed_mc_list_id->mappings;
+                            $logs[] = dt_mailchimp_logging_create( 'Processing subscribed MC list id: ' . $subscribed_mc_list_id );
 
-                                // First, attempt to fetch corresponding mc record, using the info to hand!
-                                $mc_record = fetch_mc_record( $dt_post_record, $subscribed_mc_list_id );
+                            // Ensure mc list is supported and has mapping
+                            if ( in_array( $subscribed_mc_list_id, $supported_mc_lists ) && isset( $supported_mappings->$subscribed_mc_list_id ) ) {
 
-                                // If still no hit, then a new mc record will be created
-                                $is_new_mc_record = false;
-                                if ( empty( $mc_record ) ) {
-                                    $mc_record        = create_mc_record( $dt_post_record, $subscribed_mc_list_id );
-                                    $is_new_mc_record = true;
-                                }
+                                // Ensure mappings post type corresponds with current post type id; so as to avoid cross post type syncs
+                                if ( $dt_post_type_id === $supported_mappings->$subscribed_mc_list_id->dt_post_type ) {
 
-                                // Only proceed if we have a handle on corresponding mc record
-                                if ( ! empty( $mc_record ) ) {
+                                    // Extract array of mapped fields; which are to be kept in sync
+                                    $field_mappings = $supported_mappings->$subscribed_mc_list_id->mappings;
+                                    $logs[]         = dt_mailchimp_logging_create( 'Field mappings count: ' . count( $field_mappings ) );
 
-                                    // Apart from a newly created mc record; which will default to current mapped fields
-                                    // ensure dt has the most recent modifications of the two records, in order to update
-                                    if ( $is_new_mc_record || dt_record_has_latest_changes( $dt_post_record, $mc_record ) ) {
+                                    // First, attempt to fetch corresponding mc record, using the info to hand!
+                                    $mc_record = fetch_mc_record( $dt_post_record, $subscribed_mc_list_id );
 
-                                        $updated = update_mc_record( $subscribed_mc_list_id, $dt_post_record, $mc_record, $field_mappings, $mc_list_interest_categories );
+                                    // If still no hit, then a new mc record will be created
+                                    $is_new_mc_record = false;
+                                    if ( empty( $mc_record ) ) {
+                                        $mc_record        = create_mc_record( $dt_post_record, $subscribed_mc_list_id );
+                                        $is_new_mc_record = true;
+                                    }
 
-                                        // Update last run timestamps, assuming we have valid updates
-                                        if ( ! empty( $updated ) ) {
-                                            update_list_option_value( $subscribed_mc_list_id, 'dt_to_mc_last_sync_run', time() );
-                                            update_list_option_value( $subscribed_mc_list_id, 'log', '' );
-                                            sync_debug( 'dt_mailchimp_dt_debug', '' );
+                                    $logs[] = dt_mailchimp_logging_create( 'New MC record: ' . ( ( $is_new_mc_record === true ) ? 'YES' : 'NO' ) );
+                                    $logs[] = dt_mailchimp_logging_create( 'MC record still null: ' . ( ( empty( $mc_record ) === true ) ? 'YES' : 'NO' ) );
+
+                                    // Only proceed if we have a handle on corresponding mc record
+                                    if ( ! empty( $mc_record ) ) {
+
+                                        $logs[] = dt_mailchimp_logging_create( 'Linked with MC record: ' . $mc_record->email_address );
+
+                                        // Only proceed with mc record update, if it's in a subscribed state!
+                                        if ( isset( $mc_record->status ) && strtolower( $mc_record->status ) === 'subscribed' ) {
+
+                                            // Apart from a newly created mc record; which will default to current mapped fields
+                                            // ensure dt has the most recent modifications of the two records, in order to update
+                                            if ( $is_new_mc_record || dt_record_has_latest_changes( $dt_post_record, $mc_record ) ) {
+
+                                                // Update mc record
+                                                $logs[]  = dt_mailchimp_logging_create( 'Attempting to update MC record: ' . $mc_record->email_address );
+                                                $updated = update_mc_record( $subscribed_mc_list_id, $dt_post_record, $mc_record, $field_mappings, $mc_list_interest_categories, $logs );
+
+                                                // Update last run timestamps, assuming we have valid updates
+                                                if ( ! empty( $updated ) ) {
+                                                    update_list_option_value( $subscribed_mc_list_id, 'dt_to_mc_last_sync_run', time() );
+                                                    update_list_option_value( $subscribed_mc_list_id, 'log', '' );
+                                                    sync_debug( 'dt_mailchimp_dt_debug', '' );
+                                                    $logs[] = dt_mailchimp_logging_create( 'Updated MC record: ' . $updated->email_address );
+
+                                                } else {
+                                                    $logs[] = dt_mailchimp_logging_create( 'MC record [' . $mc_record->email_address . '] not updated!' );
+                                                }
+                                            } else {
+                                                $logs[] = dt_mailchimp_logging_create( 'DT record does not have latest changes! No update to be performed!' );
+                                            }
+                                        } else {
+                                            $logs[] = dt_mailchimp_logging_create( 'MC record [' . $mc_record->email_address . '] not updated, as not in a subscribed state! Current status is - ' . $mc_record->status );
                                         }
+                                    } else {
+                                        sync_debug( 'dt_mailchimp_dt_debug', 'Unable to locate/create a valid mc list ' . $subscribed_mc_list_id . ' record, based on ' . $dt_post_type_id . ' dt record [id:' . $dt_post_record['ID'] . '].' );
+                                        update_list_option_value( $subscribed_mc_list_id, 'log', 'Unable to locate/create a valid mc record, based on ' . $dt_post_type_id . ' dt record [id:' . $dt_post_record['ID'] . '].' );
+                                        $logs[] = dt_mailchimp_logging_create( 'Unable to locate/create a valid mc list ' . $subscribed_mc_list_id . ' record, based on ' . $dt_post_type_id . ' dt record [id:' . $dt_post_record['ID'] . '].' );
                                     }
                                 } else {
-                                    sync_debug( 'dt_mailchimp_dt_debug', 'Unable to locate/create a valid mc list ' . $subscribed_mc_list_id . ' record, based on ' . $dt_post_type_id . ' dt record [id:' . $dt_post_record['ID'] . '].' );
-                                    update_list_option_value( $subscribed_mc_list_id, 'log', 'Unable to locate/create a valid mc record, based on ' . $dt_post_type_id . ' dt record [id:' . $dt_post_record['ID'] . '].' );
+                                    $logs[] = dt_mailchimp_logging_create( 'DT post type [' . $dt_post_type_id . '] and mappings post type [' . $supported_mappings->$subscribed_mc_list_id->dt_post_type . '] mismatch!' );
                                 }
+                            } else {
+                                $logs[] = dt_mailchimp_logging_create( 'Subscribed MC list [' . $subscribed_mc_list_id . '] not supported and no mappings detected!' );
                             }
                         }
+                    } else {
+                        $logs[] = dt_mailchimp_logging_create( 'DT record sync flag disabled!' );
                     }
+                } catch ( Exception $exception ) {
+                    $logs[] = dt_mailchimp_logging_create( 'Exception: ' . $exception->getMessage() );
                 }
             }
         }
-        // Update global sync run timestamp
+
+        // Update global sync run timestamp and logs
         update_global_last_run( 'dt_mailchimp_sync_last_run_ts_dt_to_mc', time() );
+        $logs[] = dt_mailchimp_logging_create( '[FINISHED] - DT -> MC' );
+        dt_mailchimp_logging_update( $logs );
     }
 }
 
 function sync_mc_to_dt() {
     if ( is_sync_enabled( 'dt_mailchimp_mc_accept_sync' ) ) {
 
+        // Load logs
+        $logs   = dt_mailchimp_logging_load();
+        $logs[] = dt_mailchimp_logging_create( '[STARTED] - MC -> DT' );
+
         // Determine global last run timestamp
         $last_run = fetch_global_last_run( 'dt_mailchimp_sync_last_run_ts_mc_to_dt' );
 
         // Adjust run start sliding-window, so as to capture any stragglers, since last run
         $last_run_start_window = adjust_last_run_start_window( $last_run, 1 ); // 1Hr prior to last run
+        $logs[]                = dt_mailchimp_logging_create( 'MC record search starting point: ' . dt_format_date( $last_run_start_window, 'long' ) );
 
         // Fetch supported mc lists
         $supported_mc_lists = fetch_supported_array( 'dt_mailchimp_mc_supported_lists' );
+        $logs[]             = dt_mailchimp_logging_create( 'Supported MC list count: ' . count( $supported_mc_lists ) );
 
         // Fetch mailchimp list interest category groups
         $mc_list_interest_categories = fetch_mc_list_interest_categories( $supported_mc_lists );
@@ -157,59 +212,144 @@ function sync_mc_to_dt() {
 
             // Query mc for changed/new member records
             $latest_mc_records = fetch_latest_mc_records( $mc_list_id, $last_run_start_window );
+            $logs[]            = dt_mailchimp_logging_create( 'Latest MC records count: ' . count( $latest_mc_records ) );
 
             // Loop over latest mc member records
             foreach ( $latest_mc_records as $mc_record ) {
 
-                // Ensure record's assigned mc list is supported and has mapping
-                if ( in_array( $mc_record->list_id, $supported_mc_lists ) && isset( $supported_mappings->{$mc_record->list_id} ) ) {
+                try {
 
-                    $hidden_id_field_tag = Disciple_Tools_Mailchimp_API::get_default_list_hidden_id_field();
-                    $dt_post_type_id     = $supported_mappings->{$mc_record->list_id}->dt_post_type;
+                    $logs[] = dt_mailchimp_logging_create( 'Processing MC record: ' . $mc_record->email_address . ' from list: ' . $mc_record->list_id );
 
-                    // First, attempt to fetch corresponding dt record, using the info to hand!
-                    $fetch_results  = fetch_dt_record( $mc_record, $dt_post_type_id );
-                    $dt_record      = $fetch_results['record'];
-                    $already_linked = $fetch_results['linked'];
+                    // Ensure record's assigned mc list is supported and has mapping
+                    if ( in_array( $mc_record->list_id, $supported_mc_lists ) && isset( $supported_mappings->{$mc_record->list_id} ) ) {
 
-                    // If still no hit, then a new dt record will be created
-                    $is_new_dt_record = false;
-                    if ( empty( $dt_record ) ) {
-                        $dt_record        = create_dt_record( $mc_record, $dt_post_type_id );
-                        $is_new_dt_record = true;
-                    }
+                        $hidden_id_field_tag = Disciple_Tools_Mailchimp_API::get_default_list_hidden_id_field();
+                        $dt_post_type_id     = $supported_mappings->{$mc_record->list_id}->dt_post_type;
+                        $logs[]              = dt_mailchimp_logging_create( 'Mapped DT post type: ' . $dt_post_type_id );
 
-                    // Handle dt record subscription status - Ensure it remains in sync with mc record
-                    $dt_record = handle_dt_record_subscription( $dt_record, $mc_record );
+                        // First, attempt to fetch corresponding dt record, using the info to hand!
+                        $fetch_results  = fetch_dt_record( $mc_record, $dt_post_type_id );
+                        $dt_record      = $fetch_results['record'];
+                        $already_linked = $fetch_results['linked'];
 
-                    // Only proceed if we have a handle on corresponding dt record
-                    if ( ! empty( $dt_record ) && ( ! $already_linked || ( is_dt_record_sync_enabled( $dt_record ) && in_array( $mc_record->list_id, $dt_record['dt_mailchimp_subscribed_mc_lists'] ) ) ) ) {
-
-                        // Ensure mc record has latest changes, in order to update dt
-                        if ( $is_new_dt_record || ! $already_linked || ! dt_record_has_latest_changes( $dt_record, $mc_record ) ) {
-
-                            // Extract array of mapped fields; which are to be kept in sync
-                            $field_mappings = $supported_mappings->{$mc_record->list_id}->mappings;
-
-                            // Update dt record
-                            $updated = update_dt_record( $dt_record, $mc_record, $field_mappings, $mc_list_interest_categories );
-
-                            // Update last run timestamps, assuming we have valid updates
-                            if ( ! empty( $updated ) ) {
-                                update_list_option_value( $mc_record->list_id, 'mc_to_dt_last_sync_run', time() );
-                                update_list_option_value( $mc_record->list_id, 'log', '' );
-                                sync_debug( 'dt_mailchimp_mc_debug', '' );
-                            }
+                        // If still no hit, then a new dt record will be created
+                        $is_new_dt_record = false;
+                        if ( empty( $dt_record ) ) {
+                            $dt_record        = create_dt_record( $mc_record, $dt_post_type_id );
+                            $is_new_dt_record = true;
                         }
-                    } elseif ( empty( $dt_record ) ) {
-                        sync_debug( 'dt_mailchimp_mc_debug', 'Unable to locate/create a valid ' . $dt_post_type_id . ' dt record for mc list ' . $mc_record->list_id . ' record [id:' . $mc_record->id . ']' );
-                        update_list_option_value( $mc_record->list_id, 'log', 'Unable to locate/create a valid ' . $dt_post_type_id . ' dt record for mc record [id:' . $mc_record->id . ']' );
+
+                        $logs[] = dt_mailchimp_logging_create( 'New DT record: ' . ( ( $is_new_dt_record === true ) ? 'YES' : 'NO' ) );
+                        $logs[] = dt_mailchimp_logging_create( 'Already linked: ' . ( ( $already_linked === true ) ? 'YES' : 'NO' ) );
+                        $logs[] = dt_mailchimp_logging_create( 'DT record still null: ' . ( ( empty( $dt_record ) === true ) ? 'YES' : 'NO' ) );
+
+                        // Handle dt record subscription status - Ensure it remains in sync with mc record
+                        $subscribe_update_results = handle_dt_record_subscription( $dt_record, $mc_record, $logs );
+                        $dt_record                = $subscribe_update_results['dt_record'];
+
+                        // Only proceed if we have a handle on corresponding dt record
+                        if ( ! empty( $dt_record ) && ( ! $already_linked || ( is_dt_record_sync_enabled( $dt_record ) && in_array( $mc_record->list_id, $dt_record['dt_mailchimp_subscribed_mc_lists'] ) ) ) ) {
+
+                            $logs[] = dt_mailchimp_logging_create( 'Linked with DT record: ' . $dt_record['ID'] );
+
+                            // Ensure mc record has latest changes, in order to update dt
+                            if ( $is_new_dt_record || ! $already_linked || ! dt_record_has_latest_changes( $dt_record, $mc_record ) ) {
+
+                                // Extract array of mapped fields; which are to be kept in sync
+                                $field_mappings = $supported_mappings->{$mc_record->list_id}->mappings;
+                                $logs[]         = dt_mailchimp_logging_create( 'Field mappings count: ' . count( $field_mappings ) );
+
+                                // Update dt record
+                                $logs[]  = dt_mailchimp_logging_create( 'Attempting to update DT record: ' . $dt_record['ID'] );
+                                $updated = update_dt_record( $dt_record, $mc_record, $field_mappings, $mc_list_interest_categories, $logs );
+
+                                // Update last run timestamps, assuming we have valid updates
+                                if ( ! empty( $updated ) && ! is_wp_error( $updated ) ) {
+                                    update_list_option_value( $mc_record->list_id, 'mc_to_dt_last_sync_run', time() );
+                                    update_list_option_value( $mc_record->list_id, 'log', '' );
+                                    sync_debug( 'dt_mailchimp_mc_debug', '' );
+                                    $logs[] = dt_mailchimp_logging_create( 'Updated DT record: ' . $updated['ID'] );
+
+                                } else {
+                                    $logs[] = dt_mailchimp_logging_create( 'DT record [' . $dt_record['ID'] . '] not updated!' );
+                                }
+                            } else {
+                                $logs[] = dt_mailchimp_logging_create( 'MC record does not have latest changes! No update to be performed!' );
+                            }
+                        } elseif ( empty( $dt_record ) ) {
+                            sync_debug( 'dt_mailchimp_mc_debug', 'Unable to locate/create a valid ' . $dt_post_type_id . ' dt record for mc list ' . $mc_record->list_id . ' record [' . $mc_record->email_address . ']' );
+                            update_list_option_value( $mc_record->list_id, 'log', 'Unable to locate/create a valid ' . $dt_post_type_id . ' dt record for mc record [' . $mc_record->email_address . ']' );
+                            $logs[] = dt_mailchimp_logging_create( 'Unable to locate/create a valid ' . $dt_post_type_id . ' dt record for mc list ' . $mc_record->list_id . ' record [' . $mc_record->email_address . ']' );
+
+                        } elseif ( $subscribe_update_results['status_changed'] ) {
+                            update_list_option_value( $mc_record->list_id, 'mc_to_dt_last_sync_run', time() );
+                            update_list_option_value( $mc_record->list_id, 'log', '' );
+                            sync_debug( 'dt_mailchimp_mc_debug', '' );
+                            $logs[] = dt_mailchimp_logging_create( 'Updated DT record: ' . $dt_record['ID'] );
+
+                        } else {
+                            $logs[] = dt_mailchimp_logging_create( 'DT record [' . $dt_record['ID'] . '] not updated!' );
+                        }
+                    } else {
+                        $logs[] = dt_mailchimp_logging_create( 'MC list id [' . $mc_record->list_id . '] not supported and no mappings detected!' );
                     }
+                } catch ( Exception $exception ) {
+                    $logs[] = dt_mailchimp_logging_create( 'Exception: ' . $exception->getMessage() );
                 }
             }
         }
-        // Update global sync run timestamp
+
+        // Update global sync run timestamp and logs
         update_global_last_run( 'dt_mailchimp_sync_last_run_ts_mc_to_dt', time() );
+        $logs[] = dt_mailchimp_logging_create( '[FINISHED] - MC -> DT' );
+        dt_mailchimp_logging_update( $logs );
+    }
+}
+
+function dt_mailchimp_logging_load(): array {
+    return ! empty( get_option( 'dt_mailchimp_logging' ) ) ? json_decode( get_option( 'dt_mailchimp_logging' ) ) : [];
+}
+
+function dt_mailchimp_logging_create( $msg ) {
+    return (object) [
+        'timestamp' => time(),
+        'log'       => $msg
+    ];
+}
+
+function dt_mailchimp_logging_update( $logs ) {
+    update_option( 'dt_mailchimp_logging', json_encode( $logs ) );
+}
+
+function dt_mailchimp_logging_add( $log ) {
+    $logs   = ! empty( get_option( 'dt_mailchimp_logging' ) ) ? json_decode( get_option( 'dt_mailchimp_logging' ) ) : [];
+    $logs[] = dt_mailchimp_logging_create( $log );
+    update_option( 'dt_mailchimp_logging', json_encode( $logs ) );
+}
+
+function dt_mailchimp_logging_aged() {
+    // Remove entries older than specified aged period!
+    $logs = dt_mailchimp_logging_load();
+    if ( ! empty( $logs ) ) {
+        $cut_off_point_ts  = time() - ( 3600 * 1 ); // 1 hr ago!
+        $cut_off_point_idx = 0;
+
+        $count = count( $logs );
+        for ( $x = 0; $x < $count; $x ++ ) {
+
+            // Stale logs will typically be found at the start! Therefore, capture transition point!
+            if ( $logs[ $x ]->timestamp > $cut_off_point_ts ) {
+                $cut_off_point_idx = $x;
+                $x                 = $count;
+            }
+        }
+
+        // Age off any stale logs
+        if ( $cut_off_point_idx > 0 ) {
+            $stale_logs = array_splice( $logs, 0, $cut_off_point_idx );
+            dt_mailchimp_logging_update( $logs );
+        }
     }
 }
 
@@ -316,7 +456,7 @@ function fetch_mc_record( $dt_post_record, $mc_list_id ) {
     if ( ! empty( $mc_record ) ) {
         $hidden_id_field_tag = Disciple_Tools_Mailchimp_API::get_default_list_hidden_id_field();
 
-        if ( $dt_post_record['ID'] !== $mc_record->merge_fields->{$hidden_id_field_tag} ) {
+        if ( strval( $dt_post_record['ID'] ) !== strval( $mc_record->merge_fields->{$hidden_id_field_tag} ) ) {
 
             $mc_fields = [];
             if ( Disciple_Tools_Mailchimp_API::has_list_got_hidden_id_fields( $mc_list_id ) ) {
@@ -338,16 +478,25 @@ function fetch_mc_record( $dt_post_record, $mc_list_id ) {
     return $mc_record;
 }
 
-function fetch_mc_record_by_email( $dt_post_record, $mc_list_id ) {
+function fetch_mc_record_by_email( $dt_post_record, $mc_list_id, $first_record_only = true ) {
     $emails = extract_dt_record_emails( $dt_post_record, false );
     if ( isset( $emails ) && ! empty( $emails ) ) {
 
+        $mc_records = [];
         // Search Mailchimp for a corresponding record, based on loop email address
         foreach ( $emails as $email ) {
             $mc_record = Disciple_Tools_Mailchimp_API::find_list_member_by_email( $mc_list_id, $email['value'] );
             if ( ! empty( $mc_record ) ) {
-                return $mc_record;
+                if ( $first_record_only ) {
+                    return $mc_record;
+                } else {
+                    $mc_records[] = $mc_record;
+                }
             }
+        }
+
+        if ( count( $mc_records ) > 0 && ! $first_record_only ) {
+            return $mc_records;
         }
     }
 
@@ -383,7 +532,7 @@ function fetch_dt_record( $mc_record, $dt_post_type_id ): array {
         if ( ! empty( $dt_record ) ) {
             $hidden_id_field_tag = Disciple_Tools_Mailchimp_API::get_default_list_hidden_id_field();
 
-            if ( $dt_record['ID'] !== $mc_record->merge_fields->{$hidden_id_field_tag} ) {
+            if ( strval( $dt_record['ID'] ) !== strval( $mc_record->merge_fields->{$hidden_id_field_tag} ) ) {
 
                 $mc_fields = [];
                 if ( Disciple_Tools_Mailchimp_API::has_list_got_hidden_id_fields( $mc_record->list_id ) ) {
@@ -594,7 +743,7 @@ function fetch_mc_list_category_interests( $mc_list_id, $cat_id, $mc_list_intere
     return $interests;
 }
 
-function update_mc_record( $mc_list_id, $dt_record, $mc_record, $mappings, $mc_list_interest_categories ) {
+function update_mc_record( $mc_list_id, $dt_record, $mc_record, $mappings, $mc_list_interest_categories, &$logs ) {
 
     $updated_merge_fields       = [];
     $updated_interests          = [];
@@ -607,7 +756,7 @@ function update_mc_record( $mc_list_id, $dt_record, $mc_record, $mappings, $mc_l
         // Distinguish between different field shapes; e.g. arrays, strings...
         // Historically, ff array, default value will be taken from the first element.
         // However, since the introduction of mc list interest category support; multi_select fields are expected!
-        $dt_field = $dt_record[ $mapping->dt_field_id ];
+        $dt_field = $dt_record[ $mapping->dt_field_id ] ?? null;
         if ( ! empty( $dt_field ) ) {
 
             // INTEREST CATEGORY GROUP UPDATES
@@ -649,7 +798,11 @@ function update_mc_record( $mc_list_id, $dt_record, $mc_record, $mappings, $mc_l
                                 foreach ( $applied_mapping_options->value as $value ) { // Should be an untouched category interest
                                     $updated_interests[ $value->int_id ] = $value->int_selected;
                                 }
+                            } else {
+                                $logs[] = dt_mailchimp_logging_create( 'No mapped MC field [' . $mapping->mc_field_id . '] category interests value changes detected!' );
                             }
+                        } else {
+                            $logs[] = dt_mailchimp_logging_create( 'Mapped MC field [' . $mapping->mc_field_id . '] sync update canceled, following options call!' );
                         }
                     }
                 }
@@ -667,7 +820,11 @@ function update_mc_record( $mc_list_id, $dt_record, $mc_record, $mappings, $mc_l
                     // Safeguard against potential infinite update loops
                     if ( ! matching_mc_field_value( $mc_record, $mapping->mc_field_id, $applied_mapping_options->value ) ) {
                         $updated_merge_fields[ $mapping->mc_field_id ] = $applied_mapping_options->value;
+                    } else {
+                        $logs[] = dt_mailchimp_logging_create( 'No mapped MC field [' . $mapping->mc_field_id . '] value changes detected!' );
                     }
+                } else {
+                    $logs[] = dt_mailchimp_logging_create( 'Mapped MC field [' . $mapping->mc_field_id . '] sync update canceled, following options call!' );
                 }
             }
         }
@@ -679,14 +836,19 @@ function update_mc_record( $mc_list_id, $dt_record, $mc_record, $mappings, $mc_l
         // Package updated values, ahead of final push
         $updated_mc_record = [];
 
+        $updated_fields_count = 0;
         if ( ! empty( $updated_merge_fields ) ) {
             $updated_mc_record['merge_fields'] = $updated_merge_fields;
+            $updated_fields_count              += count( $updated_merge_fields );
         }
         if ( ! empty( $updated_interests ) ) {
             $updated_mc_record['interests'] = $updated_interests;
+            $updated_fields_count           += count( $updated_interests );
         }
 
         // Finally, post update request
+        $logs[] = dt_mailchimp_logging_create( 'Mapped MC fields to be updated count: ' . $updated_fields_count );
+
         return Disciple_Tools_Mailchimp_API::update_list_member( $mc_list_id, $mc_record->id, $updated_mc_record );
 
     } else {
@@ -694,7 +856,7 @@ function update_mc_record( $mc_list_id, $dt_record, $mc_record, $mappings, $mc_l
     }
 }
 
-function update_dt_record( $dt_record, $mc_record, $mappings, $mc_list_interest_categories ) {
+function update_dt_record( $dt_record, $mc_record, $mappings, $mc_list_interest_categories, &$logs ) {
 
     $prefix_interest_categories = Disciple_Tools_Mailchimp_API::get_list_interest_categories_field_prefix();
 
@@ -752,7 +914,11 @@ function update_dt_record( $dt_record, $mc_record, $mappings, $mc_list_interest_
                                             }
                                         }
                                     }
+                                } else {
+                                    $logs[] = dt_mailchimp_logging_create( 'No mapped DT field [' . $dt_field_name . '] category interests value changes detected!' );
                                 }
+                            } else {
+                                $logs[] = dt_mailchimp_logging_create( 'Mapped DT field [' . $dt_field_name . '] sync update canceled, following options call!' );
                             }
                         }
                     }
@@ -782,7 +948,7 @@ function update_dt_record( $dt_record, $mc_record, $mappings, $mc_list_interest_
                             if ( $is_text_field ) {
                                 $updated_fields[ $dt_field_name ] = $applied_mapping_options->value;
 
-                            } elseif ( isset( $dt_record[ $dt_field_name ] ) && is_array( $dt_record[ $dt_field_name ] ) ) {
+                            } elseif ( isset( $dt_record[ $dt_field_name ] ) && is_array( $dt_record[ $dt_field_name ] ) && isset( $dt_record[ $dt_field_name ][0]['key'] ) ) {
                                 $updated_fields[ $dt_field_name ][0] = [
                                     'value' => $applied_mapping_options->value,
                                     'key'   => $dt_record[ $dt_field_name ][0]['key']
@@ -793,7 +959,11 @@ function update_dt_record( $dt_record, $mc_record, $mappings, $mc_list_interest_
                                     'value' => $applied_mapping_options->value
                                 ];
                             }
+                        } else {
+                            $logs[] = dt_mailchimp_logging_create( 'No mapped DT field [' . $dt_field_name . '] value changes detected!' );
                         }
+                    } else {
+                        $logs[] = dt_mailchimp_logging_create( 'Mapped DT field [' . $dt_field_name . '] sync update canceled, following options call!' );
                     }
                 }
             }
@@ -801,11 +971,19 @@ function update_dt_record( $dt_record, $mc_record, $mappings, $mc_list_interest_
     }
 
     // Update dt record accordingly; assuming we have valid mapped field updates
+    $logs[] = dt_mailchimp_logging_create( 'Mapped DT fields to be updated count: ' . count( $updated_fields ) );
     if ( count( $updated_fields ) > 0 ) {
-        return DT_Posts::update_post( $dt_record['post_type'], $dt_record['ID'], $updated_fields, false, false );
-    } else {
-        return null;
+        $updated = DT_Posts::update_post( $dt_record['post_type'], $dt_record['ID'], $updated_fields, false, false );
+
+        if ( is_wp_error( $updated ) ) {
+            $logs[] = dt_mailchimp_logging_create( 'DT Post Update Error: ' . $updated->get_error_message() );
+
+        } else {
+            return $updated;
+        }
     }
+
+    return null;
 }
 
 function matching_mc_field_value( $mc_record, $mc_field_id, $value ): bool {
@@ -817,8 +995,8 @@ function matching_mc_field_value( $mc_record, $mc_field_id, $value ): bool {
 
 function matching_dt_field_value( $dt_record, $dt_field_id, $value ): bool {
 
-    $dt_field = $dt_record[ $dt_field_id ];
-    if ( ! empty( $dt_field ) ) {
+    $dt_field = $dt_record[ $dt_field_id ] ?? null;
+    if ( ! empty( $dt_field ) && isset( $dt_field[0]['value'] ) ) {
 
         $dt_field_value = is_array( $dt_field ) ? $dt_field[0]['value'] : $dt_field;
 
@@ -847,7 +1025,11 @@ function matching_dt_field_category_interests( $dt_record, $dt_field_id, $dt_fie
     foreach ( $interests as $interest ) {
         foreach ( $dt_field_defaults as $key => $default ) {
             if ( $interest->int_name === $default['label'] ) {
-                if ( $interest->int_selected !== in_array( $key, $dt_record[ $dt_field_id ] ) ) {
+                if ( isset( $dt_record[ $dt_field_id ] ) ) {
+                    if ( $interest->int_selected !== in_array( $key, $dt_record[ $dt_field_id ] ) ) {
+                        $matching = false;
+                    }
+                } elseif ( ! isset( $dt_record[ $dt_field_id ] ) && $interest->int_selected === true ) {
                     $matching = false;
                 }
             }
@@ -857,11 +1039,15 @@ function matching_dt_field_category_interests( $dt_record, $dt_field_id, $dt_fie
     return $matching;
 }
 
-function handle_dt_record_subscription( $dt_record, $mc_record ) {
+function handle_dt_record_subscription( $dt_record, $mc_record, &$logs ): array {
+
+    $results                   = [];
+    $results['dt_record']      = $dt_record;
+    $results['status_changed'] = false;
 
     // Simply echo back if dt record is empty
     if ( empty( $dt_record ) ) {
-        return $dt_record;
+        return $results;
     }
 
     // Determine current subscription status for both records
@@ -880,19 +1066,56 @@ function handle_dt_record_subscription( $dt_record, $mc_record ) {
             ];
 
         } elseif ( ! $is_mc_record_subscribed && $is_dt_record_subscribed ) {
-            $dt_fields['dt_mailchimp_subscribed_mc_lists']['values'][0] = [
-                'value'  => $mc_record->list_id,
-                'delete' => true
-            ];
+
+            // Carry out additional checks so as to ensure dt record is not linked with multiple mc records!
+            // If so, then ensure all linked mc records are in an unsubscribed state; in order for dt record
+            // to be unsubscribed!
+            $logs[] = dt_mailchimp_logging_create( 'Checking unsubscribed status of linked mc records' );
+            if ( handle_dt_record_subscription_all_linked_mc_records_unsubscribed( $dt_record, $mc_record, $logs ) ) {
+                $logs[]                                                     = dt_mailchimp_logging_create( 'Unsubscribing ' . $dt_record['post_type'] . ' DT record [' . $dt_record['ID'] . ']' );
+                $dt_fields['dt_mailchimp_subscribed_mc_lists']['values'][0] = [
+                    'value'  => $mc_record->list_id,
+                    'delete' => true
+                ];
+            } else {
+                $logs[] = dt_mailchimp_logging_create( $dt_record['post_type'] . ' DT record [' . $dt_record['ID'] . '] to remain in a subscribed state!' );
+            }
         }
 
         if ( count( $dt_fields ) > 0 ) {
             $updated_dt_record = DT_Posts::update_post( $dt_record['post_type'], $dt_record['ID'], $dt_fields, false, false );
             if ( ! is_wp_error( $updated_dt_record ) ) {
-                return $updated_dt_record;
+                $results['dt_record']      = $updated_dt_record;
+                $results['status_changed'] = true;
+
+            } else {
+                $logs[] = dt_mailchimp_logging_create( 'DT Post Update Error: ' . $updated_dt_record->get_error_message() );
+
             }
         }
     }
 
-    return $dt_record;
+    return $results;
+}
+
+function handle_dt_record_subscription_all_linked_mc_records_unsubscribed( $dt_record, $mc_record, &$logs ) {
+    $all_unsubscribed = true;
+    $mc_records       = fetch_mc_record_by_email( $dt_record, $mc_record->list_id, false );
+
+    if ( isset( $mc_records ) && ! empty( $mc_records ) ) {
+        $logs[] = dt_mailchimp_logging_create( 'Linked mc records count: ' . count( $mc_records ) );
+
+        foreach ( $mc_records as $linked_mc_record ) {
+
+            // For now, do not enforce dt hidden id check; so as to also capture
+            // linked mc records; which might not have a set hidden id field!
+            if ( isset( $linked_mc_record->status ) && strtolower( $linked_mc_record->status ) === 'subscribed' ) {
+                $all_unsubscribed = false;
+                $logs[]           = dt_mailchimp_logging_create( 'Linked mc record[' . $linked_mc_record->email_address . '] is still subscribed!' );
+
+            }
+        }
+    }
+
+    return $all_unsubscribed;
 }

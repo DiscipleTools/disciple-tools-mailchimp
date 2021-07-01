@@ -82,6 +82,8 @@ class Disciple_Tools_Mailchimp_Menu {
                    class="nav-tab <?php echo esc_html( ( $tab == 'general' || ! isset( $tab ) ) ? 'nav-tab-active' : '' ); ?>">General</a>
                 <a href="<?php echo esc_attr( $link ) . 'mappings' ?>"
                    class="nav-tab <?php echo esc_html( ( $tab == 'mappings' || ! isset( $tab ) ) ? 'nav-tab-active' : '' ); ?>">Mappings</a>
+                <a href="<?php echo esc_attr( $link ) . 'logging' ?>"
+                   class="nav-tab <?php echo esc_html( ( $tab == 'logging' || ! isset( $tab ) ) ? 'nav-tab-active' : '' ); ?>">Logging</a>
             </h2>
 
             <?php
@@ -92,6 +94,10 @@ class Disciple_Tools_Mailchimp_Menu {
                     break;
                 case "mappings":
                     $object = new Disciple_Tools_Mailchimp_Tab_Mappings();
+                    $object->content();
+                    break;
+                case "logging":
+                    $object = new Disciple_Tools_Mailchimp_Tab_Logging();
                     $object->content();
                     break;
                 default:
@@ -1236,3 +1242,92 @@ class Disciple_Tools_Mailchimp_Tab_Mappings {
     }
 }
 
+
+/**
+ * Class Disciple_Tools_Mailchimp_Tab_Logging
+ */
+class Disciple_Tools_Mailchimp_Tab_Logging {
+    public function content() {
+        ?>
+        <div class="wrap">
+            <div id="poststuff">
+                <div id="post-body" class="metabox-holder columns-2">
+                    <div id="post-body-content">
+                        <!-- Main Column -->
+
+                        <?php $this->main_column() ?>
+
+                        <!-- End Main Column -->
+                    </div><!-- end post-body-content -->
+                    <div id="postbox-container-1" class="postbox-container">
+                        <!-- Right Column -->
+
+                        <?php $this->right_column() ?>
+
+                        <!-- End Right Column -->
+                    </div><!-- postbox-container 1 -->
+                    <div id="postbox-container-2" class="postbox-container">
+                    </div><!-- postbox-container 2 -->
+                </div><!-- post-body meta box container -->
+            </div><!--poststuff end -->
+        </div><!-- wrap end -->
+        <?php
+    }
+
+    public function main_column() {
+        ?>
+        <!-- Box -->
+        <table class="widefat striped">
+            <thead>
+            <tr>
+                <th>Logging</th>
+            </tr>
+            </thead>
+            <tbody>
+            <tr>
+                <td>
+                    <?php $this->main_column_display_logging(); ?>
+                </td>
+            </tr>
+            </tbody>
+        </table>
+        <br>
+        <!-- End Box -->
+        <?php
+    }
+
+    public function right_column() {
+        ?>
+        <div id="mappings_option_div" style="display: none;"></div>
+        <?php
+    }
+
+    public function main_column_display_logging() {
+        ?>
+        <table class="widefat striped">
+            <thead>
+            <tr>
+                <th style="vertical-align: middle; text-align: left; min-width: 150px;">Timestamp</th>
+                <th style="vertical-align: middle; text-align: left;">Log</th>
+            </tr>
+            </thead>
+            <?php
+            $logs = ! empty( get_option( 'dt_mailchimp_logging' ) ) ? json_decode( get_option( 'dt_mailchimp_logging' ) ) : [];
+            if ( ! empty( $logs ) ) {
+                $counter = 0;
+                $limit   = 500;
+                for ( $x = count( $logs ) - 1; $x > 0; $x -- ) {
+                    if ( ++ $counter <= $limit ) {
+                        echo '<tr>';
+                        echo '<td style="vertical-align: middle; text-align: left; min-width: 150px;">' . esc_attr( dt_format_date( $logs[ $x ]->timestamp, 'long' ) ) . '</td>';
+                        echo '<td style="vertical-align: middle; text-align: left;">' . esc_attr( $logs[ $x ]->log ) . '</td>';
+                        echo '</td>';
+                        echo '</tr>';
+                    }
+                }
+            }
+            ?>
+        </table>
+        <?php
+    }
+}
