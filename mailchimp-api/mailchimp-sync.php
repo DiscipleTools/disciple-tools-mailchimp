@@ -818,7 +818,7 @@ function update_mc_record( $mc_list_id, $dt_record, $mc_record, $mappings, $mc_l
                 if ( $applied_mapping_options->continue ) {
 
                     // Safeguard against potential infinite update loops
-                    if ( ! matching_mc_field_value( $mc_record, $mapping->mc_field_id, $applied_mapping_options->value ) ) {
+                    if ( ! matching_mc_field_value( $dt_record, $mc_record, $mapping->mc_field_id, $applied_mapping_options->value ) ) {
                         $updated_merge_fields[ $mapping->mc_field_id ] = $applied_mapping_options->value;
                     } else {
                         $logs[] = dt_mailchimp_logging_create( 'No mapped MC field [' . $mapping->mc_field_id . '] value changes detected!' );
@@ -986,21 +986,43 @@ function update_dt_record( $dt_record, $mc_record, $mappings, $mc_list_interest_
     return null;
 }
 
-function matching_mc_field_value( $mc_record, $mc_field_id, $value ): bool {
+function matching_mc_field_value( $dt_record, $mc_record, $mc_field_id, $value ): bool {
 
-    $mc_field_value = ( $mc_field_id === 'EMAIL' ) ? $mc_record->email_address : $mc_record->merge_fields->{$mc_field_id};
+    // Ensure email checks also validate against all linked mc records
+    if ( $mc_field_id === 'EMAIL' ) {
+        $mc_records = fetch_mc_record_by_email( $dt_record, $mc_record->list_id, false );
 
-    return ( ! empty( $mc_field_value ) && ( $mc_field_value === $value ) );
+        if ( isset( $mc_records ) && ! empty( $mc_records ) ) {
+            foreach ( $mc_records as $linked_mc_record ) {
+                if ( $linked_mc_record->email_address === $value ) {
+                    return true;
+                }
+            }
+        }
+    } else {
+        $mc_field_value = $mc_record->merge_fields->{$mc_field_id};
+
+        return ( ! empty( $mc_field_value ) && ( $mc_field_value === $value ) );
+    }
+
+    return false;
 }
 
 function matching_dt_field_value( $dt_record, $dt_field_id, $value ): bool {
 
     $dt_field = $dt_record[ $dt_field_id ] ?? null;
-    if ( ! empty( $dt_field ) && isset( $dt_field[0]['value'] ) ) {
+    if ( ! empty( $dt_field ) ) {
 
-        $dt_field_value = is_array( $dt_field ) ? $dt_field[0]['value'] : $dt_field;
-
-        return ( ! empty( $dt_field_value ) && ( $dt_field_value === $value ) );
+        // If field is array, check value against all elements
+        if ( is_array( $dt_field ) ) {
+            foreach ( $dt_field as $item ) {
+                if ( isset( $item['value'] ) && ! empty( $item['value'] ) && ( $item['value'] === $value ) ) {
+                    return true;
+                }
+            }
+        } else {
+            return ( $dt_field === $value );
+        }
     }
 
     return false;
