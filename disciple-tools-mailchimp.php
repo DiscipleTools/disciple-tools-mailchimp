@@ -89,12 +89,6 @@ class Disciple_Tools_Mailchimp {
     private function __construct() {
 
         /**
-         * @todo Decide if you want to create a new post type
-         * To remove: delete the line below and remove the folder named /post-type
-         */
-        require_once( 'post-type/loader.php' ); // add starter post type extension to Disciple Tools system
-
-        /**
          * @todo Decide if you want to add a custom tile
          * To remove: delete the line below and remove the folder named /tile
          */
