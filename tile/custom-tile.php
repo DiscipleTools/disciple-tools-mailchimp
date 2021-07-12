@@ -30,7 +30,10 @@ class Disciple_Tools_Mailchimp_Tile {
      */
     public function dt_details_additional_tiles( $tiles, $post_type = "" ) {
         if ( $post_type === "contacts" ) {
-            $tiles["disciple_tools_mailchimp"] = [ "label" => __( "Mailchimp", 'disciple_tools' ) ];
+            $contact_id    = get_the_ID();
+            if ( $contact_id ){
+                $tiles["disciple_tools_mailchimp"] = [ "label" => __( "Mailchimp", 'disciple_tools' ) ];
+            }
         }
 
         return $tiles;
@@ -67,6 +70,7 @@ class Disciple_Tools_Mailchimp_Tile {
                 'type'        => 'text',
                 'default'     => '',
                 'tile'        => 'disciple_tools_mailchimp',
+                "customizable" => false,
                 'icon'        => get_template_directory_uri() . '/dt-assets/images/name.svg',
             ];
             $fields['dt_mailchimp_lname'] = [
@@ -75,16 +79,18 @@ class Disciple_Tools_Mailchimp_Tile {
                 'type'        => 'text',
                 'default'     => '',
                 'tile'        => 'disciple_tools_mailchimp',
+                "customizable" => false,
                 'icon'        => get_template_directory_uri() . '/dt-assets/images/name.svg',
             ];
             /**
              * Mailchimp supported lists multiselect field
              */
             $fields["dt_mailchimp_subscribed_mc_lists"]            = [
-                "name"   => __( 'Audiences Lists', 'disciple_tools' ),
+                "name"   => __( 'Mailchimp Lists Subscription', 'disciple_tools' ),
                 "tile"   => "disciple_tools_mailchimp",
                 "type"   => "multi_select",
                 "hidden" => false,
+                "customizable" => false,
                 'icon'   => get_template_directory_uri() . '/dt-assets/images/list.svg',
             ];
             $fields["dt_mailchimp_subscribed_mc_lists"]["default"] = [];
