@@ -18,6 +18,7 @@ class Disciple_Tools_Mailchimp_Tile {
         add_filter( 'dt_details_additional_tiles', [ $this, "dt_details_additional_tiles" ], 10, 2 );
         add_filter( "dt_custom_fields_settings", [ $this, "dt_custom_fields" ], 1, 2 );
         // add_action( "dt_details_additional_section", [ $this, "dt_add_section" ], 30, 2 );
+        add_filter( 'dt_set_roles_and_permissions', [ $this, 'dt_set_roles_and_permissions' ], 10, 1 );
     }
 
     /**
@@ -31,7 +32,8 @@ class Disciple_Tools_Mailchimp_Tile {
     public function dt_details_additional_tiles( $tiles, $post_type = "" ) {
         if ( $post_type === "contacts" ) {
             $contact_id    = get_the_ID();
-            if ( $contact_id ){
+
+            if ( $contact_id && current_user_can( "admin_mailchimp") ){
                 $tiles["disciple_tools_mailchimp"] = [ "label" => __( "Mailchimp", 'disciple_tools' ) ];
             }
         }
@@ -147,6 +149,29 @@ class Disciple_Tools_Mailchimp_Tile {
             </div>
 
         <?php }
+    }
+
+    /**
+     * determine permission to access mailchimp tile.
+     * @param $expected_roles
+     * @return mixed
+     */
+    public function dt_set_roles_and_permissions( $expected_roles ){
+
+        if ( !isset( $expected_roles["mailchimp_admin"] ) ){
+            $expected_roles["mailchimp_admin"] = [
+                "label" => __( 'Mailchimp Admin', 'disciple_tools' ),
+                "permissions" => [ 'admin_mailchimp' => true ],
+                "description" => "Subscribe and un-subscribe contacts form Mailchimp Lists"
+            ];
+        }
+        if ( isset( $expected_roles["administrator"] ) ){
+            $expected_roles["administrator"]["permissions"]["admin_mailchimp"] = true;
+        }
+
+
+        // if the user can access contact they also can access this post type
+        return $expected_roles;
     }
 }
 
