@@ -49,15 +49,51 @@ jQuery(function ($) {
   }
 
   function table_row_add_col_mc_fields() {
-    let mc_fields = JSON.parse($('#mc_mappings_main_col_selected_mc_list_fields_hidden').val());
+    let mc_fields = filter_mc_fields(JSON.parse($('#mc_mappings_main_col_selected_mc_list_fields_hidden').val()));
 
     let html = '<select id ="mc_mappings_main_col_selected_mc_list_mappings_table_col_mc_fields_select_ele" style="max-width: 100px;">';
-    for (let i = 0; i < mc_fields.length; i++) {
-      html += '<option value="' + window.lodash.escape(mc_fields[i].merge_id) + '">' + window.lodash.escape(mc_fields[i].name) + '</option>';
+
+    // Merge Fields
+    if (mc_fields.mc_merge_fields && mc_fields.mc_merge_fields.length > 0) {
+      html += '<option disabled value>-- Default Fields --</option>';
+      for (let i = 0; i < mc_fields.mc_merge_fields.length; i++) {
+        html += '<option value="' + window.lodash.escape(mc_fields.mc_merge_fields[i].merge_id) + '">' + window.lodash.escape(mc_fields.mc_merge_fields[i].name) + '</option>';
+      }
     }
+
+    // Interest Categories
+    if (mc_fields.mc_interest_categories && mc_fields.mc_interest_categories.length > 0) {
+      html += '<option disabled value>-- Interest Category Groups --</option>';
+      for (let i = 0; i < mc_fields.mc_interest_categories.length; i++) {
+        html += '<option value="' + window.lodash.escape(mc_fields.mc_interest_categories[i].merge_id) + '">' + window.lodash.escape(mc_fields.mc_interest_categories[i].name) + '</option>';
+      }
+    }
+
     html += '</select>';
 
     return html;
+  }
+
+  function filter_mc_fields(mc_fields) {
+    let mc_merge_fields = [];
+    let mc_interest_categories = [];
+
+    let prefix_interest_categories = $('#mc_mappings_main_col_selected_mc_list_fields_prefix_interest_categories_hidden').val();
+
+    // Filter different mc field types
+    for (let i = 0; i < mc_fields.length; i++) {
+      if (mc_fields[i].merge_id.startsWith(prefix_interest_categories)) {
+        mc_interest_categories.push(mc_fields[i]);
+      } else {
+        mc_merge_fields.push(mc_fields[i]);
+      }
+    }
+
+    // Return filtered fields
+    return {
+      'mc_merge_fields': mc_merge_fields,
+      'mc_interest_categories': mc_interest_categories
+    };
   }
 
   function table_row_add_col_dt_fields() {

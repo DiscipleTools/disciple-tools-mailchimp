@@ -94,6 +94,54 @@ class Disciple_Tools_Mailchimp_API {
         }
     }
 
+    public static function get_list_interest_categories( $list_id, $load_interests = false ): array {
+        if ( ! self::has_api_key() ) {
+            return [];
+        }
+
+        $categories = [];
+
+        $interest_categories = self::get_mailchimp_client()->lists->getListInterestCategories( $list_id, null, null, 1000 );
+
+        if ( ! empty( $interest_categories ) && ! empty( $interest_categories->categories ) ) {
+
+            // Iterate over categories, obtaining associated interests in the process
+            foreach ( $interest_categories->categories as $category ) {
+
+                $interest_data = [];
+
+                if ( $load_interests ) {
+
+                    // Fetch associated interests
+                    $interests = self::get_mailchimp_client()->lists->listInterestCategoryInterests( $list_id, $category->id, null, null, 1000 );
+
+                    // Reshape data structure, ahead of final assignment and return!
+                    if ( ! empty( $interests ) && ! empty( $interests->interests ) ) {
+                        foreach ( $interests->interests as $interest ) {
+                            $interest_data[] = (object) [
+                                "int_id"   => $interest->id,
+                                "int_name" => $interest->name
+                            ];
+                        }
+                    }
+                }
+
+                // Capture category, ahead of final return
+                $categories[ $category->id ] = (object) [
+                    "cat_id"        => $category->id,
+                    "cat_title"     => $category->title,
+                    "cat_interests" => $interest_data
+                ];
+            }
+        }
+
+        return $categories;
+    }
+
+    public static function get_list_interest_categories_field_prefix(): string {
+        return '[INTCAT]_';
+    }
+
     public static function get_list_members_since_last_changed( $list_id, $epoch_timestamp ): array {
         if ( ! self::has_api_key() ) {
             return [];
