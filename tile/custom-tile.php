@@ -33,7 +33,7 @@ class Disciple_Tools_Mailchimp_Tile {
         if ( $post_type === "contacts" ) {
             $contact_id    = get_the_ID();
 
-            if ( $contact_id && current_user_can( "admin_mailchimp") ){
+            if ( $contact_id && current_user_can( "admin_mailchimp" ) ) {
                 $tiles["disciple_tools_mailchimp"] = [ "label" => __( "Mailchimp", 'disciple_tools' ) ];
             }
         }
