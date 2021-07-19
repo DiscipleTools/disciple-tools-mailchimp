@@ -369,6 +369,10 @@ function fetch_supported_mappings() {
     return json_decode( get_option( 'dt_mailchimp_mappings' ) );
 }
 
+function fetch_assigned_user_id() {
+    return get_option( 'dt_mailchimp_dt_new_record_assign_user_id' );
+}
+
 function update_global_last_run( $option_name, $timestamp ) {
     update_option( $option_name, $timestamp );
 }
@@ -629,6 +633,12 @@ function create_dt_record( $mc_record, $dt_post_type ) {
         $dt_fields['dt_mailchimp_subscribed_mc_lists']['values'][0] = [
             'value' => $mc_record_list_id
         ];
+
+        // If available, assign new dt record to specified user
+        $assigned_user_id = fetch_assigned_user_id();
+        if ( ! empty( $assigned_user_id ) ) {
+            $dt_fields['assigned_to'] = $assigned_user_id;
+        }
 
         // Create new dt post
         $dt_record = DT_Posts::create_post( $dt_post_type, $dt_fields, false, false );
