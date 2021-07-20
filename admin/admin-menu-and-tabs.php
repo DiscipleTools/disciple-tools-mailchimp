@@ -171,6 +171,9 @@ class Disciple_Tools_Mailchimp_Tab_General {
                 }
             }
             update_option( 'dt_mailchimp_mc_api_key', isset( $_POST['mc_main_col_connect_mc_api_key'] ) ? sanitize_text_field( wp_unslash( $_POST['mc_main_col_connect_mc_api_key'] ) ) : '' );
+
+            // Set new dt records assigned user
+            update_option( 'dt_mailchimp_dt_new_record_assign_user_id', isset( $_POST['mc_main_col_connect_dt_new_record_assigned_user'] ) ? sanitize_text_field( wp_unslash( $_POST['mc_main_col_connect_dt_new_record_assigned_user'] ) ) : '' );
         }
 
         // Available Mailchimp List Additions
@@ -255,6 +258,10 @@ class Disciple_Tools_Mailchimp_Tab_General {
         $supported_lists = get_option( 'dt_mailchimp_mc_supported_lists' );
 
         return ! empty( $supported_lists ) ? $supported_lists : '{}';
+    }
+
+    private function fetch_dt_assigned_user_id(): int {
+        return get_option( 'dt_mailchimp_dt_new_record_assign_user_id' );
     }
 
     public function main_column() {
@@ -397,6 +404,26 @@ class Disciple_Tools_Mailchimp_Tab_General {
                     <td>
                         <input type="checkbox" id="mc_main_col_connect_dt_push_sync_feed"
                                name="mc_main_col_connect_dt_push_sync_feed" <?php echo esc_attr( $this->is_push_dt_sync_enabled() ? 'checked' : '' ) ?> />
+                    </td>
+                </tr>
+                <tr>
+                    <td style="vertical-align: middle;">New DT Records Assigned User</td>
+                    <td>
+                        <select style="min-width: 100%;" id="mc_main_col_connect_dt_new_record_assigned_user"
+                                name="mc_main_col_connect_dt_new_record_assigned_user">
+                            <option disabled selected value>-- select default assigned user --</option>
+
+                            <?php
+                            $users = Disciple_Tools_Users::get_assignable_users_compact();
+                            if ( ! empty( $users ) && ! is_wp_error( $users ) ) {
+                                $assigned_user = $this->fetch_dt_assigned_user_id();
+                                foreach ( $users as $user ) {
+                                    $selected = ( intval( $user['ID'] ) === intval( $assigned_user ) ) ? 'selected' : '';
+                                    echo '<option ' . esc_attr( $selected ) . ' value="' . esc_attr( $user['ID'] ) . '">' . esc_attr( $user['name'] ) . '</option>';
+                                }
+                            }
+                            ?>
+                        </select>
                     </td>
                 </tr>
             </table>
