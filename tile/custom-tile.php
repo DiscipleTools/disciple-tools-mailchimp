@@ -161,7 +161,7 @@ class Disciple_Tools_Mailchimp_Tile {
         if ( !isset( $expected_roles["mailchimp_admin"] ) ){
             $expected_roles["mailchimp_admin"] = [
                 "label" => __( 'Mailchimp Admin', 'disciple_tools' ),
-                "permissions" => [ 'admin_mailchimp' => true ],
+                "permissions" => [ 'admin_mailchimp' => true, 'access_disciple_tools' => true ],
                 "description" => "Subscribe and un-subscribe contacts form Mailchimp Lists"
             ];
         }
