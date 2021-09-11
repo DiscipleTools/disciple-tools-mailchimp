@@ -22,6 +22,7 @@
     "low": "https://raw.githubusercontent.com/DiscipleTools/disciple-tools-mailchimp/master/documentation/banner.png",
     "high": "https://raw.githubusercontent.com/DiscipleTools/disciple-tools-mailchimp/master/documentation/banner.png"
   },
+  "icon": "https://raw.githubusercontent.com/DiscipleTools/disciple-tools-mailchimp/master/documentation/mailchimp-icon.png",
   "sections": {
     "description": "Integrate your Mailchimp audience lists with Disciple Tools and keep contact information continuously in sync between the two platforms.",
     "installation": "(Required) You must have Disciple.Tools Theme installed before using this plugin. Once Disciple.Tools is installed, you can use the normal Plugin system to install the plugin.",
