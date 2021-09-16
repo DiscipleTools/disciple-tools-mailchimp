@@ -19,8 +19,8 @@
   "tested": "5.7",
   "upgrade_notice": "Upgrade to get the latest features.",
   "banners": {
-    "low": "https://raw.githubusercontent.com/DiscipleTools/disciple-tools-mailchimp/master/documentation/banner.png",
-    "high": "https://raw.githubusercontent.com/DiscipleTools/disciple-tools-mailchimp/master/documentation/banner.png"
+    "low": "https://raw.githubusercontent.com/DiscipleTools/disciple-tools-mailchimp/master/documentation/mailchimp-banner.png",
+    "high": "https://raw.githubusercontent.com/DiscipleTools/disciple-tools-mailchimp/master/documentation/mailchimp-banner.png"
   },
   "icon": "https://raw.githubusercontent.com/DiscipleTools/disciple-tools-mailchimp/master/documentation/mailchimp-icon.png",
   "sections": {

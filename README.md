@@ -1,5 +1,6 @@
 [![Build Status](https://travis-ci.com/DiscipleTools/disciple-tools-mailchimp.svg?branch=master)](https://travis-ci.com/DiscipleTools/disciple-tools-mailchimp)
 
+![Mailchimp](https://raw.githubusercontent.com/DiscipleTools/disciple-tools-mailchimp/master/documentation/mailchimp-banner.png)
 # Disciple Tools - Mailchimp
 
 Integrate your Mailchimp audience lists with Disciple Tools and keep contact information continuously in sync between the two platforms.
