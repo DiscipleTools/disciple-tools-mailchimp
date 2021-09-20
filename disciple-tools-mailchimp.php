@@ -1,6 +1,6 @@
 <?php
 /**
- * Plugin Name: Disciple Tools - Mailchimp
+ *Plugin Name: Disciple.Tools - Mailchimp
  * Plugin URI: https://github.com/DiscipleTools/disciple-tools-mailchimp
  * Description: Disciple Tools - Mailchimp plugin is intended to integrate Mailchimp with the Disciple Tools system.
  * Text Domain: disciple-tools-mailchimp
