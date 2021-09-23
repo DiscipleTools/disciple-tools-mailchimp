@@ -2,7 +2,7 @@
 /**
  *Plugin Name: Disciple.Tools - Mailchimp
  * Plugin URI: https://github.com/DiscipleTools/disciple-tools-mailchimp
- * Description: Disciple Tools - Mailchimp plugin is intended to integrate Mailchimp with the Disciple Tools system.
+ * Description: Disciple.Tools - Mailchimp plugin is intended to integrate Mailchimp with the Disciple.Tools system.
  * Text Domain: disciple-tools-mailchimp
  * Domain Path: /languages
  * Version:  1.2
@@ -238,9 +238,9 @@ if ( ! function_exists( 'disciple_tools_mailchimp_hook_admin_notice' ) ) {
         global $disciple_tools_mailchimp_required_dt_theme_version;
         $wp_theme        = wp_get_theme();
         $current_version = $wp_theme->version;
-        $message         = "'Disciple Tools - Mailchimp' plugin requires 'Disciple Tools' theme to work. Please activate 'Disciple Tools' theme or make sure it is latest version.";
+        $message         = "'Disciple.Tools - Mailchimp' plugin requires 'Disciple.Tools' theme to work. Please activate 'Disciple.Tools' theme or make sure it is latest version.";
         if ( $wp_theme->get_template() === "disciple-tools-theme" ) {
-            $message .= ' ' . sprintf( esc_html( 'Current Disciple Tools version: %1$s, required version: %2$s' ), esc_html( $current_version ), esc_html( $disciple_tools_mailchimp_required_dt_theme_version ) );
+            $message .= ' ' . sprintf( esc_html( 'Current Disciple.Tools version: %1$s, required version: %2$s' ), esc_html( $current_version ), esc_html( $disciple_tools_mailchimp_required_dt_theme_version ) );
         }
         // Check if it's been dismissed...
         if ( ! get_option( 'dismissed-disciple-tools-mailchimp', false ) ) { ?>

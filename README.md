@@ -1,9 +1,9 @@
 [![Build Status](https://travis-ci.com/DiscipleTools/disciple-tools-mailchimp.svg?branch=master)](https://travis-ci.com/DiscipleTools/disciple-tools-mailchimp)
 
 ![Mailchimp](https://raw.githubusercontent.com/DiscipleTools/disciple-tools-mailchimp/master/documentation/mailchimp-banner.png)
-# Disciple Tools - Mailchimp
+# Disciple.Tools - Mailchimp
 
-Integrate your Mailchimp audience lists with Disciple Tools and keep contact information continuously in sync between the two platforms.
+Integrate your Mailchimp audience lists with Disciple.Tools and keep contact information continuously in sync between the two platforms.
 
 ## Purpose
 
@@ -26,7 +26,7 @@ This plugin further aids the marketing effort, by keeping mapped fields in sync 
 
 ## Requirements
 
-- Disciple Tools Theme installed on a Wordpress Server
+- Disciple.Tools Theme installed on a Wordpress Server
 - An activated Mailchimp account, with a valid API key.
 
 ## Installing
