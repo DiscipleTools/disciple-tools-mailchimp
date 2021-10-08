@@ -70,7 +70,8 @@ class Disciple_Tools_Mailchimp_API {
                 array_unshift( $response->merge_fields, (object) [
                     "merge_id" => "0",
                     "tag"      => "EMAIL",
-                    "name"     => "Email"
+                    "name"     => "Email",
+                    "type"     => "email"
                 ] );
             }
 
@@ -84,14 +85,29 @@ class Disciple_Tools_Mailchimp_API {
                     }
                 }
 
-                return $filtered_fields;
+                return self::remove_unsupported_list_field_types( $filtered_fields );
 
             } else {
-                return $response->merge_fields;
+                return self::remove_unsupported_list_field_types( $response->merge_fields );
             }
         } else {
             return [];
         }
+    }
+
+    private static function remove_unsupported_list_field_types( $fields ): array {
+
+        // Currently, supported field types
+        $supported_field_types = [ 'email', 'text', 'phone', 'dropdown' ];
+
+        $valid_fields = [];
+        foreach ( $fields as $field ) {
+            if ( in_array( trim( strtolower( $field->type ) ), $supported_field_types ) ) {
+                $valid_fields[] = $field;
+            }
+        }
+
+        return $valid_fields;
     }
 
     public static function get_list_interest_categories( $list_id, $load_interests = false ): array {

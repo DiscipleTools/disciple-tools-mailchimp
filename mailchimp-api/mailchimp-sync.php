@@ -225,8 +225,10 @@ function sync_mc_to_dt() {
                     if ( in_array( $mc_record->list_id, $supported_mc_lists ) && isset( $supported_mappings->{$mc_record->list_id} ) ) {
 
                         $hidden_id_field_tag = Disciple_Tools_Mailchimp_API::get_default_list_hidden_id_field();
-                        $dt_post_type_id     = $supported_mappings->{$mc_record->list_id}->dt_post_type;
-                        $logs[]              = dt_mailchimp_logging_create( 'Mapped DT post type: ' . $dt_post_type_id );
+                        $logs[]              = dt_mailchimp_logging_create( ( isset( $mc_record->merge_fields->{$hidden_id_field_tag} ) && ! empty( $mc_record->merge_fields->{$hidden_id_field_tag} ) ) ? 'Detected Hidden ID: ' . $mc_record->merge_fields->{$hidden_id_field_tag} : 'Detected Hidden ID: ---' );
+
+                        $dt_post_type_id = $supported_mappings->{$mc_record->list_id}->dt_post_type;
+                        $logs[]          = dt_mailchimp_logging_create( 'Mapped DT post type: ' . $dt_post_type_id );
 
                         // First, attempt to fetch corresponding dt record, using the info to hand!
                         $fetch_results  = fetch_dt_record( $mc_record, $dt_post_type_id );
@@ -819,7 +821,15 @@ function update_mc_record( $mc_list_id, $dt_record, $mc_record, $mappings, $mc_l
             } else {
 
                 // MERGE FIELD UPDATES
-                $dt_field_value = is_array( $dt_field ) ? $dt_field[0]['value'] : $dt_field;
+
+                // Extract value accordingly based on field shape
+                $dt_field_value = null;
+                if ( is_array( $dt_field ) ) {
+                    $dt_field_value = $dt_field[0]['value'] ?? $dt_field['key'];
+
+                } else {
+                    $dt_field_value = $dt_field;
+                }
 
                 // Apply mapping transformation options prior to setting updated dt value
                 $applied_mapping_options = apply_mapping_options( $dt_record, $mc_record, $dt_field_value, true, $mapping->options );
@@ -827,8 +837,12 @@ function update_mc_record( $mc_list_id, $dt_record, $mc_record, $mappings, $mc_l
                 // Add updated value, assuming we have the green light to do so, following filtering of mapping options
                 if ( $applied_mapping_options->continue ) {
 
+                    // If required, switch back to label; which is what MC seems to operate in; especially when dealing with field types such as dropdowns!
+                    $applied_mapping_options->value = fetch_dt_array_default_field_label( $dt_fields, $mapping->dt_field_id, $applied_mapping_options->value );
+
                     // Safeguard against potential infinite update loops
                     if ( ! matching_mc_field_value( $dt_record, $mc_record, $mapping->mc_field_id, $applied_mapping_options->value ) ) {
+                        // If required, switch back to label; which is what MC seems to operate in; especially when dealing with field types such as dropdowns!
                         $updated_merge_fields[ $mapping->mc_field_id ] = $applied_mapping_options->value;
                     } else {
                         $logs[] = dt_mailchimp_logging_create( 'No mapped MC field [' . $mapping->mc_field_id . '] value changes detected!' );
@@ -949,13 +963,17 @@ function update_dt_record( $dt_record, $mc_record, $mappings, $mc_list_interest_
                     // Add updated value, assuming we have the green light to do so, following filtering of mapping options
                     if ( $applied_mapping_options->continue ) {
 
+                        // If required, switch to internal ids, especially when dealing with key_select types
+                        $applied_mapping_options->value = fetch_dt_array_default_field_id( $dt_fields, $dt_field_name, $applied_mapping_options->value );
+
                         // Safeguard against potential infinite update loops
                         if ( ! matching_dt_field_value( $dt_record, $dt_field_name, $applied_mapping_options->value ) ) {
 
                             // Update accordingly based on field type and it's presence!
-                            $is_text_field = isset( $dt_fields[ $dt_field_name ] ) && strtolower( $dt_fields[ $dt_field_name ]['type'] ) === 'text';
-
-                            if ( $is_text_field ) {
+                            if ( in_array( trim( strtolower( $dt_fields[ $dt_field_name ]['type'] ) ), [
+                                'text',
+                                'key_select'
+                            ] ) ) {
                                 $updated_fields[ $dt_field_name ] = $applied_mapping_options->value;
 
                             } elseif ( isset( $dt_record[ $dt_field_name ] ) && is_array( $dt_record[ $dt_field_name ] ) && isset( $dt_record[ $dt_field_name ][0]['key'] ) ) {
@@ -968,6 +986,7 @@ function update_dt_record( $dt_record, $mc_record, $mappings, $mc_list_interest_
                                 $updated_fields[ $dt_field_name ]['values'][0] = [
                                     'value' => $applied_mapping_options->value
                                 ];
+
                             }
                         } else {
                             $logs[] = dt_mailchimp_logging_create( 'No mapped DT field [' . $dt_field_name . '] value changes detected!' );
@@ -1025,8 +1044,11 @@ function matching_dt_field_value( $dt_record, $dt_field_id, $value ): bool {
 
         // If field is array, check value against all elements
         if ( is_array( $dt_field ) ) {
-            foreach ( $dt_field as $item ) {
+            foreach ( $dt_field as $key => $item ) {
                 if ( isset( $item['value'] ) && ! empty( $item['value'] ) && ( $item['value'] === $value ) ) {
+                    return true;
+
+                } elseif ( trim( strtolower( $key ) ) == 'key' && trim( strtolower( $item ) === trim( strtolower( $value ) ) ) ) {
                     return true;
                 }
             }
@@ -1150,4 +1172,28 @@ function handle_dt_record_subscription_all_linked_mc_records_unsubscribed( $dt_r
     }
 
     return $all_unsubscribed;
+}
+
+function fetch_dt_array_default_field_id( $dt_fields, $dt_field_name, $label ) {
+    if ( ! empty( $dt_fields[ $dt_field_name ]['default'] ) ) {
+        foreach ( $dt_fields[ $dt_field_name ]['default'] as $key => $value ) {
+            if ( trim( strtolower( $value['label'] ) ) === trim( strtolower( $label ) ) ) {
+                return $key;
+            }
+        }
+    }
+
+    return $label;
+}
+
+function fetch_dt_array_default_field_label( $dt_fields, $dt_field_name, $id ) {
+    if ( ! empty( $dt_fields[ $dt_field_name ]['default'] ) ) {
+        foreach ( $dt_fields[ $dt_field_name ]['default'] as $key => $value ) {
+            if ( $key === $id ) {
+                return $value['label'];
+            }
+        }
+    }
+
+    return $id;
 }
