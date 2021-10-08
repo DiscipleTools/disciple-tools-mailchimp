@@ -8,7 +8,7 @@ if ( ! defined( 'ABSPATH' ) ) {
  */
 class Disciple_Tools_Mailchimp_API {
     private static function has_api_key(): bool {
-        return ! empty( get_option( 'dt_mailchimp_mc_api_key' ) );
+        return ! empty( get_option( 'dt_mailchimp_mc_api_key' ) ) && strpos( get_option( 'dt_mailchimp_mc_api_key' ), '-' ) !== false; // check for the presence of any potential datacenters
     }
 
     private static function get_api_key(): string {
@@ -40,9 +40,14 @@ class Disciple_Tools_Mailchimp_API {
             return [];
         }
 
-        $response = self::get_mailchimp_client()->lists->getAllLists();
+        try {
+            $response = self::get_mailchimp_client()->lists->getAllLists();
 
-        return ( ! empty( $response ) && ! empty( $response->lists ) ) ? $response->lists : [];
+            return ( ! empty( $response ) && ! empty( $response->lists ) ) ? $response->lists : [];
+
+        } catch ( Exception $e ) {
+            return [];
+        }
     }
 
     public static function get_list_name( $list_id ): string {
@@ -50,9 +55,14 @@ class Disciple_Tools_Mailchimp_API {
             return '';
         }
 
-        $response = self::get_mailchimp_client()->lists->getList( $list_id );
+        try {
+            $response = self::get_mailchimp_client()->lists->getList( $list_id );
 
-        return ( ! empty( $response ) && ! empty( $response->name ) ) ? $response->name : '';
+            return ( ! empty( $response ) && ! empty( $response->name ) ) ? $response->name : '';
+
+        } catch ( Exception $e ) {
+            return '';
+        }
     }
 
     public static function get_list_fields( $list_id, $include_default_email = true, $include_hidden_fields = false ): array {
@@ -60,37 +70,41 @@ class Disciple_Tools_Mailchimp_API {
             return [];
         }
 
-        $response = self::get_mailchimp_client()->lists->getListMergeFields( $list_id );
+        try {
+            $response = self::get_mailchimp_client()->lists->getListMergeFields( $list_id );
 
-        // Return accordingly based on flags
-        if ( ! empty( $response ) && ! empty( $response->merge_fields ) ) {
+            // Return accordingly based on flags
+            if ( ! empty( $response ) && ! empty( $response->merge_fields ) ) {
 
-            // Filter Default Email Field
-            if ( $include_default_email ) {
-                array_unshift( $response->merge_fields, (object) [
-                    "merge_id" => "0",
-                    "tag"      => "EMAIL",
-                    "name"     => "Email",
-                    "type"     => "email"
-                ] );
-            }
-
-            // Filter Hidden Fields
-            if ( ! $include_hidden_fields ) {
-
-                $filtered_fields = [];
-                foreach ( $response->merge_fields as $field ) {
-                    if ( ! self::is_list_hidden_id_field( $field->name ) ) {
-                        $filtered_fields[] = $field;
-                    }
+                // Filter Default Email Field
+                if ( $include_default_email ) {
+                    array_unshift( $response->merge_fields, (object) [
+                        "merge_id" => "0",
+                        "tag"      => "EMAIL",
+                        "name"     => "Email",
+                        "type"     => "email"
+                    ] );
                 }
 
-                return self::remove_unsupported_list_field_types( $filtered_fields );
+                // Filter Hidden Fields
+                if ( ! $include_hidden_fields ) {
 
+                    $filtered_fields = [];
+                    foreach ( $response->merge_fields as $field ) {
+                        if ( ! self::is_list_hidden_id_field( $field->name ) ) {
+                            $filtered_fields[] = $field;
+                        }
+                    }
+
+                    return self::remove_unsupported_list_field_types( $filtered_fields );
+
+                } else {
+                    return self::remove_unsupported_list_field_types( $response->merge_fields );
+                }
             } else {
-                return self::remove_unsupported_list_field_types( $response->merge_fields );
+                return [];
             }
-        } else {
+        } catch ( Exception $e ) {
             return [];
         }
     }
@@ -115,43 +129,48 @@ class Disciple_Tools_Mailchimp_API {
             return [];
         }
 
-        $categories = [];
+        try {
+            $categories = [];
 
-        $interest_categories = self::get_mailchimp_client()->lists->getListInterestCategories( $list_id, null, null, 1000 );
+            $interest_categories = self::get_mailchimp_client()->lists->getListInterestCategories( $list_id, null, null, 1000 );
 
-        if ( ! empty( $interest_categories ) && ! empty( $interest_categories->categories ) ) {
+            if ( ! empty( $interest_categories ) && ! empty( $interest_categories->categories ) ) {
 
-            // Iterate over categories, obtaining associated interests in the process
-            foreach ( $interest_categories->categories as $category ) {
+                // Iterate over categories, obtaining associated interests in the process
+                foreach ( $interest_categories->categories as $category ) {
 
-                $interest_data = [];
+                    $interest_data = [];
 
-                if ( $load_interests ) {
+                    if ( $load_interests ) {
 
-                    // Fetch associated interests
-                    $interests = self::get_mailchimp_client()->lists->listInterestCategoryInterests( $list_id, $category->id, null, null, 1000 );
+                        // Fetch associated interests
+                        $interests = self::get_mailchimp_client()->lists->listInterestCategoryInterests( $list_id, $category->id, null, null, 1000 );
 
-                    // Reshape data structure, ahead of final assignment and return!
-                    if ( ! empty( $interests ) && ! empty( $interests->interests ) ) {
-                        foreach ( $interests->interests as $interest ) {
-                            $interest_data[] = (object) [
-                                "int_id"   => $interest->id,
-                                "int_name" => $interest->name
-                            ];
+                        // Reshape data structure, ahead of final assignment and return!
+                        if ( ! empty( $interests ) && ! empty( $interests->interests ) ) {
+                            foreach ( $interests->interests as $interest ) {
+                                $interest_data[] = (object) [
+                                    "int_id"   => $interest->id,
+                                    "int_name" => $interest->name
+                                ];
+                            }
                         }
                     }
+
+                    // Capture category, ahead of final return
+                    $categories[ $category->id ] = (object) [
+                        "cat_id"        => $category->id,
+                        "cat_title"     => $category->title,
+                        "cat_interests" => $interest_data
+                    ];
                 }
-
-                // Capture category, ahead of final return
-                $categories[ $category->id ] = (object) [
-                    "cat_id"        => $category->id,
-                    "cat_title"     => $category->title,
-                    "cat_interests" => $interest_data
-                ];
             }
-        }
 
-        return $categories;
+            return $categories;
+
+        } catch ( Exception $e ) {
+            return [];
+        }
     }
 
     public static function get_list_interest_categories_field_prefix(): string {
@@ -163,14 +182,18 @@ class Disciple_Tools_Mailchimp_API {
             return [];
         }
 
-        $since_last_changed = gmdate( 'Y-m-d\TH:i:s\Z', $epoch_timestamp );
-        $response           = self::get_mailchimp_client()->lists->getListMembersInfo( $list_id, null, null, 1000, 0, null, null, null, null, $since_last_changed );
+        try {
+            $since_last_changed = gmdate( 'Y-m-d\TH:i:s\Z', $epoch_timestamp );
+            $response           = self::get_mailchimp_client()->lists->getListMembersInfo( $list_id, null, null, 1000, 0, null, null, null, null, $since_last_changed );
 
-        // Return accordingly based member results
-        if ( ! empty( $response ) && ! empty( $response->members ) ) {
-            return $response->members;
+            // Return accordingly based member results
+            if ( ! empty( $response ) && ! empty( $response->members ) ) {
+                return $response->members;
 
-        } else {
+            } else {
+                return [];
+            }
+        } catch ( Exception $e ) {
             return [];
         }
     }
@@ -185,21 +208,26 @@ class Disciple_Tools_Mailchimp_API {
          * Fetch all fields associated with specified list.
          */
 
-        $list_fields = self::get_list_fields( $list_id, true, true );
-        if ( ! empty( $list_fields ) ) {
+        try {
+            $list_fields = self::get_list_fields( $list_id, true, true );
+            if ( ! empty( $list_fields ) ) {
 
-            /**
-             * Determine if returned fields contain required hidden fields?
-             */
+                /**
+                 * Determine if returned fields contain required hidden fields?
+                 */
 
-            foreach ( $list_fields as $field ) {
-                if ( self::is_list_hidden_id_field( $field->name ) ) {
-                    $hidden_fields_detected = true;
+                foreach ( $list_fields as $field ) {
+                    if ( self::is_list_hidden_id_field( $field->name ) ) {
+                        $hidden_fields_detected = true;
+                    }
                 }
             }
-        }
 
-        return $hidden_fields_detected;
+            return $hidden_fields_detected;
+
+        } catch ( Exception $e ) {
+            return $hidden_fields_detected;
+        }
     }
 
     private static function build_list_hidden_id_fields(): array {
@@ -238,8 +266,12 @@ class Disciple_Tools_Mailchimp_API {
          * Build hidden fields, iterate and create corresponding mailchimp merge fields.
          */
 
-        foreach ( self::build_list_hidden_id_fields() as $hidden_field ) {
-            self::get_mailchimp_client()->lists->addListMergeField( $list_id, $hidden_field );
+        try {
+            foreach ( self::build_list_hidden_id_fields() as $hidden_field ) {
+                self::get_mailchimp_client()->lists->addListMergeField( $list_id, $hidden_field );
+            }
+        } catch ( Exception $e ) {
+            return;
         }
     }
 
@@ -248,14 +280,19 @@ class Disciple_Tools_Mailchimp_API {
             return null;
         }
 
-        $response = self::get_mailchimp_client()->searchMembers->search( $email, null, null, $list_id );
+        try {
+            $response = self::get_mailchimp_client()->searchMembers->search( $email, null, null, $list_id );
 
-        if ( ! empty( $response ) && ! empty( $response->exact_matches ) && ( $response->exact_matches->total_items > 0 ) ) {
-            // For now, we just return the first hit
-            return $response->exact_matches->members[0];
+            if ( ! empty( $response ) && ! empty( $response->exact_matches ) && ( $response->exact_matches->total_items > 0 ) ) {
+                // For now, we just return the first hit
+                return $response->exact_matches->members[0];
+            }
+
+            return null;
+
+        } catch ( Exception $e ) {
+            return null;
         }
-
-        return null;
     }
 
     public static function find_list_member_by_hidden_id_fields( $list_id, $id ) {
@@ -268,26 +305,31 @@ class Disciple_Tools_Mailchimp_API {
          * Currently, only the first 1K members are searched!
          */
 
-        $response = self::get_mailchimp_client()->lists->getListMembersInfo( $list_id, null, null, 1000 );
+        try {
+            $response = self::get_mailchimp_client()->lists->getListMembersInfo( $list_id, null, null, 1000 );
 
-        // Start traversing list members, in search of the one!
-        if ( ! empty( $response ) && ! empty( $response->members ) ) {
-            $default_hidden_field_tag = self::get_default_list_hidden_id_field();
-            foreach ( $response->members as $member ) {
-                // Are merge fields present
-                if ( isset( $member->merge_fields ) ) {
-                    // Is default hidden field present
-                    if ( isset( $member->merge_fields->$default_hidden_field_tag ) ) {
-                        // Do we have a match?
-                        if ( $id === intval( $member->merge_fields->$default_hidden_field_tag ) ) {
-                            return $member;
+            // Start traversing list members, in search of the one!
+            if ( ! empty( $response ) && ! empty( $response->members ) ) {
+                $default_hidden_field_tag = self::get_default_list_hidden_id_field();
+                foreach ( $response->members as $member ) {
+                    // Are merge fields present
+                    if ( isset( $member->merge_fields ) ) {
+                        // Is default hidden field present
+                        if ( isset( $member->merge_fields->$default_hidden_field_tag ) ) {
+                            // Do we have a match?
+                            if ( $id === intval( $member->merge_fields->$default_hidden_field_tag ) ) {
+                                return $member;
+                            }
                         }
                     }
                 }
             }
-        }
 
-        return null;
+            return null;
+
+        } catch ( Exception $e ) {
+            return null;
+        }
     }
 
     public static function add_new_list_member( $list_id, $member ) {
@@ -295,12 +337,16 @@ class Disciple_Tools_Mailchimp_API {
             return null;
         }
 
-        $response = self::get_mailchimp_client()->lists->addListMember( $list_id, $member );
+        try {
+            $response = self::get_mailchimp_client()->lists->addListMember( $list_id, $member );
 
-        if ( ! empty( $response ) && ! empty( $response->id ) ) {
-            return $response;
+            if ( ! empty( $response ) && ! empty( $response->id ) ) {
+                return $response;
 
-        } else {
+            } else {
+                return null;
+            }
+        } catch ( Exception $e ) {
             return null;
         }
     }
@@ -310,12 +356,16 @@ class Disciple_Tools_Mailchimp_API {
             return null;
         }
 
-        $response = self::get_mailchimp_client()->lists->updateListMember( $list_id, $member_id, $updates );
+        try {
+            $response = self::get_mailchimp_client()->lists->updateListMember( $list_id, $member_id, $updates );
 
-        if ( ! empty( $response ) && ! empty( $response->id ) ) {
-            return $response;
+            if ( ! empty( $response ) && ! empty( $response->id ) ) {
+                return $response;
 
-        } else {
+            } else {
+                return null;
+            }
+        } catch ( Exception $e ) {
             return null;
         }
     }
