@@ -5,7 +5,7 @@
  * Description: Disciple.Tools - Mailchimp plugin is intended to integrate Mailchimp with the Disciple.Tools system.
  * Text Domain: disciple-tools-mailchimp
  * Domain Path: /languages
- * Version:  1.3
+ * Version:  1.4
  * Author URI: https://github.com/DiscipleTools
  * GitHub Plugin URI: https://github.com/DiscipleTools/disciple-tools-mailchimp
  * Requires at least: 4.7.0
