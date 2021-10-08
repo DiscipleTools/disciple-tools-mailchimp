@@ -364,7 +364,8 @@ function adjust_last_run_start_window( $last_run, $hrs ): int {
 }
 
 function is_sync_enabled( $option_name ): bool {
-    return boolval( get_option( $option_name ) );
+    $in_debug_mode = defined( WP_DEBUG ) && WP_DEBUG === true;
+    return !$in_debug_mode && boolval( get_option( $option_name ) );
 }
 
 function fetch_supported_mappings() {
