@@ -260,7 +260,7 @@ class Disciple_Tools_Mailchimp_Tab_General {
         return ! empty( $supported_lists ) ? $supported_lists : '{}';
     }
 
-    private function fetch_dt_assigned_user_id(): int {
+    private function fetch_dt_assigned_user_id() {
         return get_option( 'dt_mailchimp_dt_new_record_assign_user_id' );
     }
 
@@ -418,7 +418,7 @@ class Disciple_Tools_Mailchimp_Tab_General {
                             if ( ! empty( $users ) && ! is_wp_error( $users ) ) {
                                 $assigned_user = $this->fetch_dt_assigned_user_id();
                                 foreach ( $users as $user ) {
-                                    $selected = ( intval( $user['ID'] ) === intval( $assigned_user ) ) ? 'selected' : '';
+                                    $selected = ( is_int( $assigned_user ) && intval( $user['ID'] ) === intval( $assigned_user ) ) ? 'selected' : '';
                                     echo '<option ' . esc_attr( $selected ) . ' value="' . esc_attr( $user['ID'] ) . '">' . esc_attr( $user['name'] ) . '</option>';
                                 }
                             }
@@ -992,6 +992,14 @@ class Disciple_Tools_Mailchimp_Tab_Mappings {
 
         Ensure Mailchimp interest category group fields are only mapped with DT multi_select types. No other type pairings will be sync'd at this time.
         <br><br>
+        In addition to interest category groups, the following Mailchimp field types are also supported:
+        <br>
+        <ul>
+            <li>- Text</li>
+            <li>- Phone</li>
+            <li>- Dropdowns</li>
+        </ul>
+        <hr>
 
         <span style="float:right;">
             <a id="mc_mappings_main_col_selected_mc_list_add_mapping_but"
