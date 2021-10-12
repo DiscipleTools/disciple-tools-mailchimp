@@ -46,6 +46,8 @@ class Disciple_Tools_Mailchimp_API {
             return ( ! empty( $response ) && ! empty( $response->lists ) ) ? $response->lists : [];
 
         } catch ( Exception $e ) {
+            dt_mailchimp_logging_add( $e->getMessage() );
+
             return [];
         }
     }
@@ -61,6 +63,8 @@ class Disciple_Tools_Mailchimp_API {
             return ( ! empty( $response ) && ! empty( $response->name ) ) ? $response->name : '';
 
         } catch ( Exception $e ) {
+            dt_mailchimp_logging_add( $e->getMessage() );
+
             return '';
         }
     }
@@ -105,6 +109,8 @@ class Disciple_Tools_Mailchimp_API {
                 return [];
             }
         } catch ( Exception $e ) {
+            dt_mailchimp_logging_add( $e->getMessage() );
+
             return [];
         }
     }
@@ -169,6 +175,8 @@ class Disciple_Tools_Mailchimp_API {
             return $categories;
 
         } catch ( Exception $e ) {
+            dt_mailchimp_logging_add( $e->getMessage() );
+
             return [];
         }
     }
@@ -194,6 +202,8 @@ class Disciple_Tools_Mailchimp_API {
                 return [];
             }
         } catch ( Exception $e ) {
+            dt_mailchimp_logging_add( $e->getMessage() );
+
             return [];
         }
     }
@@ -226,6 +236,8 @@ class Disciple_Tools_Mailchimp_API {
             return $hidden_fields_detected;
 
         } catch ( Exception $e ) {
+            dt_mailchimp_logging_add( $e->getMessage() );
+
             return $hidden_fields_detected;
         }
     }
@@ -271,6 +283,8 @@ class Disciple_Tools_Mailchimp_API {
                 self::get_mailchimp_client()->lists->addListMergeField( $list_id, $hidden_field );
             }
         } catch ( Exception $e ) {
+            dt_mailchimp_logging_add( $e->getMessage() );
+
             return;
         }
     }
@@ -291,6 +305,8 @@ class Disciple_Tools_Mailchimp_API {
             return null;
 
         } catch ( Exception $e ) {
+            dt_mailchimp_logging_add( $e->getMessage() );
+
             return null;
         }
     }
@@ -328,6 +344,8 @@ class Disciple_Tools_Mailchimp_API {
             return null;
 
         } catch ( Exception $e ) {
+            dt_mailchimp_logging_add( $e->getMessage() );
+
             return null;
         }
     }
@@ -347,6 +365,8 @@ class Disciple_Tools_Mailchimp_API {
                 return null;
             }
         } catch ( Exception $e ) {
+            dt_mailchimp_logging_add( $e->getMessage() );
+
             return null;
         }
     }
@@ -366,6 +386,8 @@ class Disciple_Tools_Mailchimp_API {
                 return null;
             }
         } catch ( Exception $e ) {
+            dt_mailchimp_logging_add( $e->getMessage() );
+
             return null;
         }
     }
