@@ -30,7 +30,7 @@ function cron_schedules_callback( $schedules ) {
  */
 
 if ( ! wp_next_scheduled( 'dt_mailchimp_sync' ) ) {
-    wp_schedule_event( time(), 'minute', 'dt_mailchimp_sync' );
+    wp_schedule_event( time(), '5_minutes', 'dt_mailchimp_sync' );
 }
 
 /**
