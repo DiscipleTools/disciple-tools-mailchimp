@@ -5,32 +5,11 @@ if ( ! defined( 'ABSPATH' ) ) {
 } // Exit if accessed directly
 
 /**
- * Extend schedule options.
- */
-
-add_filter( 'cron_schedules', 'cron_schedules_callback', 10, 1 );
-function cron_schedules_callback( $schedules ) {
-    $arr = array();
-
-    $arr['minute'] = array(
-        'interval' => 1 * MINUTE_IN_SECONDS,
-        'display'  => __( 'Every Minute' )
-    );
-
-    $arr['5_minutes'] = array(
-        'interval' => 5 * MINUTE_IN_SECONDS,
-        'display'  => __( 'Every 5 Minutes' )
-    );
-
-    return $arr;
-}
-
-/**
  * Register cron module.
  */
 
 if ( ! wp_next_scheduled( 'dt_mailchimp_sync' ) ) {
-    wp_schedule_event( time(), '5_minutes', 'dt_mailchimp_sync' );
+    wp_schedule_event( time(), '5min', 'dt_mailchimp_sync' );
 }
 
 /**
