@@ -174,6 +174,9 @@ class Disciple_Tools_Mailchimp_Tab_General {
 
             // Set new dt records assigned user
             update_option( 'dt_mailchimp_dt_new_record_assign_user_id', isset( $_POST['mc_main_col_connect_dt_new_record_assigned_user'] ) ? sanitize_text_field( wp_unslash( $_POST['mc_main_col_connect_dt_new_record_assigned_user'] ) ) : '' );
+
+            // Request scheduling of cron event
+            Disciple_Tools_Mailchimp_API::schedule_cron_event();
         }
 
         // Available Mailchimp List Additions
@@ -223,6 +226,8 @@ class Disciple_Tools_Mailchimp_Tab_General {
     }
 
     private function fetch_mc_api_key(): string {
+        Disciple_Tools_Mailchimp_API::schedule_cron_event();
+
         return get_option( 'dt_mailchimp_mc_api_key' );
     }
 

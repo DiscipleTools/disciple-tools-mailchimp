@@ -5,18 +5,10 @@ if ( ! defined( 'ABSPATH' ) ) {
 } // Exit if accessed directly
 
 /**
- * Register cron module.
- */
-
-if ( ! wp_next_scheduled( 'dt_mailchimp_sync' ) ) {
-    wp_schedule_event( time(), '5min', 'dt_mailchimp_sync' );
-}
-
-/**
  * Core synchronisation logic.
  */
 
-add_action( 'dt_mailchimp_sync', 'dt_mailchimp_sync_run' );
+add_action( Disciple_Tools_Mailchimp_API::$SCHEDULE_CRON_EVENT_HOOK, 'dt_mailchimp_sync_run' );
 function dt_mailchimp_sync_run() {
 
     // DT -> MC Sync
