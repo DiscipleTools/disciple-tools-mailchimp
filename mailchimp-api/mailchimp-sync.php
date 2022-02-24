@@ -8,7 +8,7 @@ if ( ! defined( 'ABSPATH' ) ) {
  * Core synchronisation logic.
  */
 
-add_action( Disciple_Tools_Mailchimp_API::$SCHEDULE_CRON_EVENT_HOOK, 'dt_mailchimp_sync_run' );
+add_action( Disciple_Tools_Mailchimp_API::$schedule_cron_event_hook, 'dt_mailchimp_sync_run' );
 function dt_mailchimp_sync_run() {
 
     // DT -> MC Sync
