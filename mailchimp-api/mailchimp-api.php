@@ -7,6 +7,17 @@ if ( ! defined( 'ABSPATH' ) ) {
  * Class Disciple_Tools_Mailchimp_API
  */
 class Disciple_Tools_Mailchimp_API {
+
+    public static $schedule_cron_event_hook = 'dt_mailchimp_sync';
+
+    public static function schedule_cron_event() {
+        if ( self::has_api_key() ) {
+            if ( ! wp_next_scheduled( self::$schedule_cron_event_hook ) ) {
+                wp_schedule_event( time(), '5min', self::$schedule_cron_event_hook );
+            }
+        }
+    }
+
     private static function has_api_key(): bool {
         return ! empty( get_option( 'dt_mailchimp_mc_api_key' ) ) && strpos( get_option( 'dt_mailchimp_mc_api_key' ), '-' ) !== false; // check for the presence of any potential datacenters
     }
