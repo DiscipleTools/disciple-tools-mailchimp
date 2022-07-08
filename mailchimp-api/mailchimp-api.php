@@ -57,7 +57,7 @@ class Disciple_Tools_Mailchimp_API {
             return ( ! empty( $response ) && ! empty( $response->lists ) ) ? $response->lists : [];
 
         } catch ( Exception $e ) {
-            dt_mailchimp_logging_add( $e->getMessage() );
+            dt_mailchimp_logging_add( 'get_lists() - ' . $e->getMessage() );
 
             return [];
         }
@@ -74,7 +74,7 @@ class Disciple_Tools_Mailchimp_API {
             return ( ! empty( $response ) && ! empty( $response->name ) ) ? $response->name : '';
 
         } catch ( Exception $e ) {
-            dt_mailchimp_logging_add( $e->getMessage() );
+            dt_mailchimp_logging_add( 'get_list_name() - ' . $e->getMessage() );
 
             return '';
         }
@@ -120,7 +120,7 @@ class Disciple_Tools_Mailchimp_API {
                 return [];
             }
         } catch ( Exception $e ) {
-            dt_mailchimp_logging_add( $e->getMessage() );
+            dt_mailchimp_logging_add( 'get_list_fields() - ' . $e->getMessage() );
 
             return [];
         }
@@ -186,7 +186,7 @@ class Disciple_Tools_Mailchimp_API {
             return $categories;
 
         } catch ( Exception $e ) {
-            dt_mailchimp_logging_add( $e->getMessage() );
+            dt_mailchimp_logging_add( 'get_list_interest_categories() - ' . $e->getMessage() );
 
             return [];
         }
@@ -203,7 +203,7 @@ class Disciple_Tools_Mailchimp_API {
 
         try {
             $since_last_changed = gmdate( 'Y-m-d\TH:i:s\Z', $epoch_timestamp );
-            $response           = self::get_mailchimp_client()->lists->getListMembersInfo( $list_id, null, null, 1000, 0, null, null, null, null, $since_last_changed );
+            $response           = self::get_mailchimp_client()->lists->getListMembersInfo( $list_id, null, null, 1000, 0, null, null, null, null, $since_last_changed, null, null, null, null, null, null, 'last_changed', 'ASC' );
 
             // Return accordingly based member results
             if ( ! empty( $response ) && ! empty( $response->members ) ) {
@@ -213,7 +213,7 @@ class Disciple_Tools_Mailchimp_API {
                 return [];
             }
         } catch ( Exception $e ) {
-            dt_mailchimp_logging_add( $e->getMessage() );
+            dt_mailchimp_logging_add( 'get_list_members_since_last_changed() - ' . $e->getMessage() );
 
             return [];
         }
@@ -247,7 +247,7 @@ class Disciple_Tools_Mailchimp_API {
             return $hidden_fields_detected;
 
         } catch ( Exception $e ) {
-            dt_mailchimp_logging_add( $e->getMessage() );
+            dt_mailchimp_logging_add( 'has_list_got_hidden_id_fields() - ' . $e->getMessage() );
 
             return $hidden_fields_detected;
         }
@@ -294,7 +294,7 @@ class Disciple_Tools_Mailchimp_API {
                 self::get_mailchimp_client()->lists->addListMergeField( $list_id, $hidden_field );
             }
         } catch ( Exception $e ) {
-            dt_mailchimp_logging_add( $e->getMessage() );
+            dt_mailchimp_logging_add( 'generate_list_hidden_id_fields() - ' . $e->getMessage() );
 
             return;
         }
@@ -316,7 +316,7 @@ class Disciple_Tools_Mailchimp_API {
             return null;
 
         } catch ( Exception $e ) {
-            dt_mailchimp_logging_add( $e->getMessage() );
+            dt_mailchimp_logging_add( 'find_list_member_by_email() - ' . $e->getMessage() );
 
             return null;
         }
@@ -355,7 +355,7 @@ class Disciple_Tools_Mailchimp_API {
             return null;
 
         } catch ( Exception $e ) {
-            dt_mailchimp_logging_add( $e->getMessage() );
+            dt_mailchimp_logging_add( 'find_list_member_by_hidden_id_fields() - ' .$e->getMessage() );
 
             return null;
         }
@@ -376,7 +376,8 @@ class Disciple_Tools_Mailchimp_API {
                 return null;
             }
         } catch ( Exception $e ) {
-            dt_mailchimp_logging_add( $e->getMessage() );
+            dt_mailchimp_logging_add( 'add_new_list_member() - ' . $e->getMessage() );
+            dt_mailchimp_logging_add( print_r( $member, true ) );
 
             return null;
         }
@@ -397,7 +398,8 @@ class Disciple_Tools_Mailchimp_API {
                 return null;
             }
         } catch ( Exception $e ) {
-            dt_mailchimp_logging_add( $e->getMessage() );
+            dt_mailchimp_logging_add( 'update_list_member() - ' . $e->getMessage() );
+            dt_mailchimp_logging_add( print_r( $updates, true ) );
 
             return null;
         }
