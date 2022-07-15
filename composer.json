@@ -6,5 +6,10 @@
 
     "require": {
         "mailchimp/marketing": "*"
+    },
+    "config": {
+        "allowed-plugins": {
+            "dealerdirect/phpcodesniffer-composer-installer": true
+        }
     }
 }
