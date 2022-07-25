@@ -57,7 +57,7 @@ function sync_dt_to_mc() {
             foreach ( $latest_dt_records as $dt_post_id ) {
 
                 try {
-                    dt_mailchimp_logging_add( 'Processing DT record: ' . $dt_post_id->ID . ' [' . $dt_post_id->last_modified . '] from post type: ' . $dt_post_type_id . ' - [' . ++ $latest_dt_records_counter . ' of ' . count( $latest_dt_records ) . ']' );
+                    dt_mailchimp_logging_add( 'Processing DT record: ' . $dt_post_id->ID . ' [' . $dt_post_id->last_modified . '] from post type: ' . $dt_post_type_id . ' - [' . ( ++ $latest_dt_records_counter ) . ' of ' . count( $latest_dt_records ) . ']' );
 
                     // Introduce sliding-window concept and adjust global sync run timestamp based on current post's last modified date
                     update_global_last_run( 'dt_mailchimp_sync_last_run_ts_dt_to_mc', ( $dt_post_id->last_modified + 3600 ) );
@@ -192,7 +192,7 @@ function sync_mc_to_dt() {
             foreach ( $latest_mc_records as $mc_record ) {
 
                 try {
-                    dt_mailchimp_logging_add( 'Processing MC record: ' . $mc_record->email_address . ' [' . strtotime( $mc_record->last_changed ) . '] from list: ' . $mc_record->list_id . ' - [ ' . ++ $latest_mc_records_counter . ' of ' . count( $latest_mc_records ) . ' ]' );
+                    dt_mailchimp_logging_add( 'Processing MC record: ' . $mc_record->email_address . ' [' . strtotime( $mc_record->last_changed ) . '] from list: ' . $mc_record->list_id . ' - [ ' . ( ++ $latest_mc_records_counter ) . ' of ' . count( $latest_mc_records ) . ' ]' );
 
                     // Introduce sliding-window concept and adjust global sync run timestamp based on current record's last changed date
                     update_global_last_run( 'dt_mailchimp_sync_last_run_ts_mc_to_dt', ( strtotime( $mc_record->last_changed ) + 3600 ) );
