@@ -598,10 +598,12 @@ function create_mc_record( $dt_post_record, $mc_list_id ) {
 }
 
 function create_dt_record( $mc_record, $dt_post_type ) {
-    // At the very least, both mc record's full name and list id will be needed in order to setup new dt record
-    $mc_record_full_name = $mc_record->full_name;
+
+    // Default to email address as name, if no full name has been specified.
+    $mc_record_full_name = ! empty( $mc_record->full_name ) ? $mc_record->full_name : $mc_record->email_address;
     $mc_record_list_id   = $mc_record->list_id;
 
+    // At the very least, both mc record's full name and list id will be needed in order to setup new dt record
     if ( ! empty( $mc_record_full_name ) && ! empty( $mc_record_list_id ) ) {
 
         // Prepare initial dt fields
