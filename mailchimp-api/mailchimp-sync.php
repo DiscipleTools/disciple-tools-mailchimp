@@ -89,6 +89,7 @@ function sync_dt_to_mc() {
                                     // If still no hit, then a new mc record will be created
                                     $is_new_mc_record = false;
                                     if ( empty( $mc_record ) ) {
+                                        dt_mailchimp_logging_add( 'Empty MC record detected; attempting to create a new MC record.' );
                                         $mc_record        = create_mc_record( $dt_post_record, $subscribed_mc_list_id );
                                         $is_new_mc_record = true;
                                     }
@@ -146,7 +147,7 @@ function sync_dt_to_mc() {
                         dt_mailchimp_logging_add( 'DT record sync flag disabled!' );
                     }
                 } catch ( Exception $exception ) {
-                    dt_mailchimp_logging_add( 'Exception: ' . $exception->getMessage() );
+                    dt_mailchimp_logging_add( 'Exception: ' . $exception->getTraceAsString() );
                 }
             }
         }
@@ -277,7 +278,7 @@ function sync_mc_to_dt() {
                         dt_mailchimp_logging_add( 'MC list id [' . $mc_record->list_id . '] not supported and no mappings detected!' );
                     }
                 } catch ( Exception $exception ) {
-                    dt_mailchimp_logging_add( 'Exception: ' . $exception->getMessage() );
+                    dt_mailchimp_logging_add( 'Exception: ' . $exception->getTraceAsString() );
                 }
             }
         }
