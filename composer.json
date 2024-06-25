@@ -4,12 +4,12 @@
         "wp-coding-standards/wpcs": "*"
     },
 
-    "require": {
-        "mailchimp/marketing": "*"
-    },
     "config": {
         "allow-plugins": {
             "dealerdirect/phpcodesniffer-composer-installer": true
         }
+    },
+    "require": {
+        "mailchimp/marketing": "^3.0"
     }
 }
