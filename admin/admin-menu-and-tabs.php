@@ -38,7 +38,6 @@ class Disciple_Tools_Mailchimp_Menu {
     public function __construct() {
 
         add_action( "admin_menu", array( $this, "register_menu" ) );
-
     } // End __construct()
 
 
@@ -1356,8 +1355,8 @@ class Disciple_Tools_Mailchimp_Tab_Logging {
             if ( ! empty( $logs ) ) {
                 $counter = 0;
                 $limit   = 500;
-                for ( $x = count( $logs ) - 1; $x > 0; $x -- ) {
-                    if ( ++ $counter <= $limit ) {
+                for ( $x = count( $logs ) - 1; $x > 0; $x-- ) {
+                    if ( ++$counter <= $limit ) {
                         echo '<tr>';
                         echo '<td style="vertical-align: middle; text-align: left; min-width: 150px;">' . esc_attr( dt_format_date( $logs[ $x ]->timestamp, 'long' ) ) . '</td>';
                         echo '<td style="vertical-align: middle; text-align: left;">' . esc_attr( $logs[ $x ]->log ) . '</td>';
